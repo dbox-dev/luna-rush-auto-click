@@ -1,0 +1,28 @@
+time_intervals:
+  # fight time interval default: 25 minutes
+  send_heros_for_fight: 25
+  # game action time interval default 8 minutes
+  boss_hunt_action: 8
+  interval_between_movements: 1
+
+threshold:
+  default: 0.7
+  common: 0.8
+  select_wallet_buttons: 0.8
+  go_to_work_btn: 0.9
+  green_bar: 0.9
+  stamina: 1.0
+
+scroll_size: 100
+scroll_attemps: 5
+use_click_and_drag_instead_of_scroll: true
+click_and_drag_amount: 200
+select_heroes_mode: "stamina"
+save_log_to_file: True
+
+# enable move mouse between waiting fight
+waiting_fight_move_mouse: True
+# enable line notification
+enable_line_notify: False
+line_api_url: "https://notify-api.line.me/api/notify"
+line_token: ""
