@@ -1,0 +1,1 @@
+# luna-rush-auto-click
