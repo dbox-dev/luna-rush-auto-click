@@ -5,7 +5,6 @@
 > 0xc0A75D88D49D38fFa0E96EA2ec808965cF090521
 
 ### Warning
-- Suitable for common hero, Other heros please try it your self.
 - Suitable for people who do not have time to play
 
 ### Features
@@ -13,6 +12,7 @@
 - Automatically find heroes with energy and go to boss hunt.
 - Automatically change the map
 - Switch to another tab to save the computer energy and switch back when it's time to boss hunt
+- Support multiple screen
 
 ### Computer and Browser settings
 - Unlock your Metamask
@@ -20,7 +20,7 @@
 - Chrome browser zoom 100%
 - Chrome browser Open 2 tabs first tab is game and second tab is another(empty tab or anything)
 - Windows display zoom size 100%
-- Windows display resolution 1280 x 720 or higher.
+- Windows display resolution 1280 x 900 or higher.
 
 ### Guide(Thai version)
 > [Luna Rush auto click](#)
