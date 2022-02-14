@@ -47,12 +47,13 @@ def add_randomness(n, randomn_factor_size=None):
 
 
 def move_to_with_randomness(x, y, t):
-    pyautogui.moveTo(add_randomness(x, 10), add_randomness(y, 10), t + random() / 2)
+    pyautogui.moveTo(add_randomness(x, 10), add_randomness(y, 10),
+                     t + random() / 2)
 
 
 def remove_suffix(input_string, suffix):
     if suffix and input_string.endswith(suffix):
-        return input_string[: -len(suffix)]
+        return input_string[:-len(suffix)]
     return input_string
 
 
@@ -104,8 +105,13 @@ def check_screen(img, timeout=3, threshold=ct["default"]):
 
 def print_screen():
     with mss.mss() as sct:
-        monitor = sct.monitors[0]
-        sct_img = np.array(sct.grab(monitor))
+        monitor_crop = {
+            "top": 0,
+            "left": 0,
+            "width": c["window_width"],
+            "height": c["window_height"],
+        }
+        sct_img = np.array(sct.grab(monitor_crop))
         return sct_img[:, :, :3]
 
 
@@ -133,12 +139,15 @@ def scroll_heros():
     if len(commoms) == 0:
         return
     x, y, w, h = commoms[len(commoms) - 1]
-    move_to_with_randomness(x, y + 50, 1)
+    move_to_with_randomness(x, y, 1)
 
     if not c["use_click_and_drag_instead_of_scroll"]:
         pyautogui.scroll(-c["scroll_size"])
     else:
-        pyautogui.dragRel(0, -c["click_and_drag_amount"], duration=1, button="left")
+        pyautogui.dragRel(0,
+                          -c["click_and_drag_amount"],
+                          duration=1,
+                          button="left")
 
 
 def scroll_maps():
@@ -167,20 +176,34 @@ def get_hero_with_energy():
 
 def fight_boss():
     click_btn(images["boss-hunt-btn"])
-    click_btn(images["vs"], timeout=15)
+    if click_btn(images['x']):
+        reset_fight()
+        return
+
+    if check_screen(images["vs"], timeout=15):
+        time.sleep(3)
+        pyautogui.click()
+
     fighting = True
     while fighting:
+        if game_error():
+            return
         logger(None, progress_indicator=True)
         if click_btn(images["tap-open"]):
             logger("👉 Yeah!!! We are the winner")
-            click_btn(images["victory"])
+            time.sleep(3)
+            pyautogui.click()
             fighting = False
-        elif click_btn(images["defeat"]):
+        elif check_screen(images["defeat"]):
             logger("👇 Oops!!! i'm lose")
+            time.sleep(3)
+            pyautogui.click()
             fighting = False
 
     chk = True
     while chk:
+        if game_error():
+            return
         if click_btn(images["match"], timeout=1):
             logger("👉 Yeah!! pass the map")
             chk = False
@@ -190,6 +213,16 @@ def fight_boss():
     reset_fight()
 
 
+def game_error():
+    if check_screen(images['bg'], timeout=1):
+        logger("Game error")
+        notify("The Luna Rush has an error occured")
+        pyautogui.hotkey("ctrl", "f5")
+        return True
+
+    return False
+
+
 def boss_hunting():
     reset_fight()
     logger("🦸 Search for heroes to fight")
@@ -197,18 +230,23 @@ def boss_hunting():
     offset = 5
     scroll_attemps = 0
     while hunting:
+        if game_error():
+            return
         plus = positions(images["plus"], threshold=ct["green_bar"])
         if len(plus) > 0:
             heros = get_hero_with_energy()
             if len(heros) > 0:
                 for (x, y, w, h) in heros:
-                    move_to_with_randomness(x + offset + (w / 2), y + (h / 2), 1)
+                    if game_error():
+                        return
+                    move_to_with_randomness(x + offset + (w / 2), y + (h / 2),
+                                            1)
                     pyautogui.click()
-                    hero_in_fight = positions(images["plus"], threshold=ct["green_bar"])
+                    hero_in_fight = positions(images["plus"],
+                                              threshold=ct["green_bar"])
                     if len(hero_in_fight) < 1:
-                        logger(
-                            "⚒️ Fighting with {} hero(s)".format(3 - len(hero_in_fight))
-                        )
+                        logger("⚒️ Fighting with {} hero(s)".format(
+                            3 - len(hero_in_fight)))
                         fight_boss()
                         scroll_attemps = 0
                         break
@@ -217,11 +255,11 @@ def boss_hunting():
                     scroll_heros()
                     scroll_attemps += 1
                 else:
-                    hero_in_fight = positions(images["plus"], threshold=ct["green_bar"])
+                    hero_in_fight = positions(images["plus"],
+                                              threshold=ct["green_bar"])
                     if len(hero_in_fight) <= (3 - c["hero_per_fight"]):
-                        logger(
-                            "⚒️ Fighting with {} hero(s)".format(3 - len(hero_in_fight))
-                        )
+                        logger("⚒️ Fighting with {} hero(s)".format(
+                            3 - len(hero_in_fight)))
                         fight_boss()
                         scroll_attemps = 0
                     else:
@@ -291,6 +329,8 @@ def boss_hunt():
 
 
 def reset_fight():
+    if game_error():
+        return
     plus = positions(images["plus"], threshold=ct["green_bar"])
     logger("🦸 Hero in fight -> {}".format(3 - len(plus)))
     if len(plus) >= 3:
@@ -317,9 +357,10 @@ def notify_screen(image, message="Report current screen"):
             data = {"message": message}
             headers = {"Authorization": "Bearer " + c["line_token"]}
             session = requests.Session()
-            session_post = session.post(
-                c["line_api_url"], headers=headers, files=img, data=data
-            )
+            session_post = session.post(c["line_api_url"],
+                                        headers=headers,
+                                        files=img,
+                                        data=data)
             logger("➡ " + session_post.text)
     except:
         logger("Notify error.")
@@ -333,9 +374,9 @@ def notify(message):
                 "content-type": "application/x-www-form-urlencoded",
                 "Authorization": "Bearer " + c["line_token"],
             }
-            s = requests.post(
-                c["line_api_url"], headers=headers, data={"message": message}
-            )
+            s = requests.post(c["line_api_url"],
+                              headers=headers,
+                              data={"message": message})
             logger("➡ " + s.text)
     except:
         logger("Notify error.")
@@ -392,7 +433,11 @@ def switch_to_work(screen):
     screen["instance"].width = w_width
     screen["instance"].height = w_height
     screen["instance"].topleft = (0, 0)
-    screen["instance"].activate()
+    try:
+        screen["instance"].activate()
+    except:
+        click_btn(images["luna-rush"], timeout=1)
+
     active_screen = screen_text.format(screen["index"])
     pyautogui.hotkey("ctrl", "1")
 
@@ -420,31 +465,47 @@ def main():
     while True:
         now = time.time()
         for s in last:
+            game_error()
             if check_screen(images["login"]):
                 if not (screen_text.format(last[s]["index"])) == active_screen:
                     switch_to_work(last[s])
+                else:
+                    try:
+                        last[s]["instance"].activate()
+                    except:
+                        click_btn(images["luna-rush"], timeout=1)
                 click_btn(images["ok"])
                 login()
 
-            if now - last[s]["heroes"] > add_randomness(t["send_heros_for_fight"] * 60):
+            if now - last[s]["heroes"] > add_randomness(
+                    t["send_heros_for_fight"] * 60):
                 if not (screen_text.format(last[s]["index"])) == active_screen:
                     switch_to_work(last[s])
+                else:
+                    try:
+                        last[s]["instance"].activate()
+                    except:
+                        click_btn(images["luna-rush"], timeout=1)
                 pyautogui.hotkey("ctrl", "1")
                 click_btn(images["ok"])
-                if (
-                    check_screen(images["boss-hunt"])
-                    or check_screen(images["boss-hunt-btn"])
-                    or check_screen(images["match"])
-                ):
+                if (check_screen(images["boss-hunt"])
+                        or check_screen(images["boss-hunt-btn"])
+                        or check_screen(images["match"])):
                     boss_hunt()
                     goto_home()
                     pyautogui.hotkey("ctrl", "2")
                     last[s]["heroes"] = now
                     last[s]["actions"] = now
                     last_action = now
-            elif now - last[s]["actions"] > add_randomness(t["boss_hunt_action"] * 60):
+            elif now - last[s]["actions"] > add_randomness(
+                    t["boss_hunt_action"] * 60):
                 if not (screen_text.format(last[s]["index"])) == active_screen:
                     switch_to_work(last[s])
+                else:
+                    try:
+                        last[s]["instance"].activate()
+                    except:
+                        click_btn(images["luna-rush"], timeout=1)
                 pyautogui.hotkey("ctrl", "1")
                 click_btn(images["ok"])
                 goto_boss_hunt()
@@ -454,7 +515,8 @@ def main():
                 last_action = now
             else:
                 if c["waiting_fight_move_mouse"]:
-                    move_to_with_randomness(add_randomness(500), add_randomness(500), 3)
+                    move_to_with_randomness(add_randomness(500),
+                                            add_randomness(500), 3)
 
             if now - last_action > add_randomness(t["report_no_action"] * 60):
                 notify(action_notify_msg.format(s))
