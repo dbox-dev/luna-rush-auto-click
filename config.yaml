@@ -25,11 +25,20 @@ save_log_to_file: True
 window_width: 1100
 window_height: 800
 
-window_min_width: 100
-window_min_height: 50
+window_min_width: 1100
+window_min_height: 800
 
+# To enable refresh browser. value is hours.
+# 0 = disable
+refresh_browser: 0
+
+# Stop boss hunt when completed on maps. default 0
+# 0 is no stop
+stop_when_completed_map: 0
 # Set heros per fight default 3
 hero_per_fight: 3
+
+enable_hero_low_rarity_map_10_only: True
 # enable move mouse between waiting fight
 waiting_fight_move_mouse: False
 # enable line notification
