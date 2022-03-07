@@ -5,6 +5,7 @@ time_intervals:
   boss_hunt_action: 8
   interval_between_movements: 1
   report_no_action: 30
+  check_for_login: 60
 
 threshold:
   default: 0.7
@@ -43,5 +44,6 @@ enable_hero_low_rarity_map_10_only: True
 waiting_fight_move_mouse: False
 # enable line notification
 enable_line_notify: False
+enable_notify_with_picture: True
 line_api_url: "https://notify-api.line.me/api/notify"
 line_token: ""
