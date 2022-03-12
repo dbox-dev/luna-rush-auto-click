@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from datetime import datetime, timedelta
 import sys
 import time
 from os import listdir
@@ -133,13 +134,13 @@ def print_screen():
         return sct_img[:, :, :3]
 
 
-def print_card(x, y):
+def print_of_offset(x, y, w, h):
     with mss.mss() as sct:
         monitor_crop = {
-            "top": y - 110,
-            "left": x - 30,
-            "width": 90,
-            "height": 120,
+            "top": y,
+            "left": x,
+            "width": w,
+            "height": h,
         }
         # xx = sct.grab(monitor_crop)
         # output = "sct-{top}x{left}_{width}x{height}.png".format(**monitor_crop)
@@ -168,7 +169,25 @@ def positions(target, threshold=ct["default"], img=None):
 
 def positions_of(target, x, y, threshold=ct["default"], img=None):
     if img is None:
-        img = print_card(x, y)
+        img = print_of_offset(x - 30, y - 110, 90, 120)
+    result = cv2.matchTemplate(img, target, cv2.TM_CCOEFF_NORMED)
+    w = target.shape[1]
+    h = target.shape[0]
+
+    yloc, xloc = np.where(result >= threshold)
+
+    rectangles = []
+    for (x, y) in zip(xloc, yloc):
+        rectangles.append([int(x), int(y), int(w), int(h)])
+        rectangles.append([int(x), int(y), int(w), int(h)])
+
+    rectangles, weights = cv2.groupRectangles(rectangles, 1, 0.2)
+    return rectangles
+
+
+def positions_of_offset(target, x, y, w, h, threshold=ct["default"], img=None):
+    if img is None:
+        img = print_of_offset(x, y, w, h)
     result = cv2.matchTemplate(img, target, cv2.TM_CCOEFF_NORMED)
     w = target.shape[1]
     h = target.shape[0]
@@ -187,7 +206,7 @@ def positions_of(target, x, y, threshold=ct["default"], img=None):
 def check_hero_ready(s):
     global last
     pyautogui.hotkey("ctrl", "1")
-    click_btn(images['ok'], timeout=1)
+    click_ok()
     from_home = False
     if check_screen(images['boss-hunt'], timeout=1):
         click_btn(images['heros'])
@@ -229,9 +248,12 @@ def check_hero_ready(s):
         hero_ready += len(r)
         if hero_ready >= 3:
             last[s]['ready'] = True
-            logger('🦸 {} hero(s) ready to fight'.format(hero_ready))
+            logger('🦸 [{}] {} hero(s) ready to fight'.format(
+                str(s).capitalize(), hero_ready))
         else:
-            logger('🦸 Found {} hero(s) have the energy. Not ready to boss hunt'.format(hero_ready))
+            logger(
+                '🦸 [{}] Found {} hero(s) have the energy. Not ready to boss hunt'
+                .format(str(s).capitalize(), hero_ready))
 
         click_btn(images['boss-hunt-back-2'], timeout=3, threshold=0.6)
         click_btn(images['boss-hunt'])
@@ -300,7 +322,7 @@ def fight_boss(s):
     global last
     click_btn(images["boss-hunt-btn"])
     if click_btn(images['x']):
-        reset_fight()
+        reset_fight(s)
         return True
 
     if check_screen(images["vs"], timeout=15):
@@ -310,42 +332,47 @@ def fight_boss(s):
     now = time.time()
     start_time = int(round(now * 1000))
     while fighting:
-        if game_error():
+        if game_error(s):
             return True
         if click_btn(images['x'], timeout=1):
-            reset_fight()
+            reset_fight(s)
             return True
         logger(None, progress_indicator=True)
         if click_btn(images["tap-open"]):
-            time.sleep(3)
-            notify_working_screen("👉 Yeah!!! you win")
-            pyautogui.click()
+            if check_screen(images['tap-to-continue-win'], timeout=5):
+                notify_working_screen("👉 [{}] Yeah!!! you win".format(
+                    str(s).capitalize()))
+                click_btn(images['tap-to-continue-win'], timeout=1)
             fighting = False
         elif check_screen(images["defeat"]):
-            time.sleep(3)
-            notify_working_screen("👇 Oops!!! you lose")
-            pyautogui.click()
+            if check_screen(images['tap-to-continue-lose'], timeout=5):
+                notify_working_screen("👇 [{}] Oops!!! you lose".format(
+                    str(s).capitalize()))
+                click_btn(images['tap-to-continue-lose'], timeout=1)
             fighting = False
 
         n = int(round(time.time() * 1000))
         if (n - start_time > (n + (15 * (60 * 1000))) - n):
-            notify_working_screen('Boss hunt time over 15 minutes')
+            notify_working_screen(
+                '[{}] Boss hunt time over 15 minutes'.format(
+                    str(s).capitalize()), True)
             pyautogui.hotkey("ctrl", "f5")
             return False
 
     chk = True
     while chk:
-        if game_error():
+        if game_error(s):
             return True
         if check_screen(images["match"], timeout=1):
-            logger("👉 Yeah!! pass the map")
+            logger("👉 [{}] Yeah!! pass the map".format(str(s).capitalize()))
             chk = False
             if check_screen(images['match-10'], timeout=3, threshold=0.8):
                 last[s]['map_10'] = True
-                logger('Fighting on map 10/10')
+                logger('[{}] Fighting on map 10/10'.format(
+                    str(s).capitalize()))
             else:
                 last[s]['map_10'] = False
-                logger('Fighting on map x/10')
+                logger('[{}] Fighting on map x/10'.format(str(s).capitalize()))
 
             if not check_map():
                 return False
@@ -355,27 +382,30 @@ def fight_boss(s):
         if check_screen(images["boss-hunt-btn"], timeout=1):
             chk = False
 
-    reset_fight()
     return True
 
 
-def game_error():
+def game_error(s):
     if check_screen(images['bg'], timeout=1):
-        # logger("Game error")
-        notify_working_screen("The Luna Rush has an error occured")
+        notify_working_screen(
+            "[{}] The Luna Rush has an error occured".format(
+                str(s).capitalize()), True)
         pyautogui.hotkey("ctrl", "f5")
         return True
     if check_screen(images['logo'], timeout=1):
-        # logger("Game error couldn't load the game")
-        notify_working_screen("Game error couldn't load the game")
+        notify_working_screen(
+            "[{}] Game error couldn't load the game".format(
+                str(s).capitalize()), True)
         pyautogui.hotkey("ctrl", "f5")
-        if check_screen(images['logo'], timeout=15) or click_btn(images['alert-ok'], timeout=15):
-            # logger('Game still loading wating 30 minutes')
-            notify_working_screen("Game still loading wating 30 minutes")
+        if check_screen(images['logo'], timeout=15) or click_btn(
+                images['alert-ok'], timeout=15):
+            notify_working_screen(
+                "[{}] Game still loading wating 30 minutes".format(
+                    str(s).capitalize()), True)
             time.sleep(1800)
         else:
-            # logger('Game is come back')
-            notify_working_screen('Game is come back')
+            notify_working_screen(
+                '[{}] Game is come back'.format(str(s).capitalize()), True)
         return True
 
     return False
@@ -383,14 +413,14 @@ def game_error():
 
 def boss_hunting(s):
     global last
-    reset_fight()
+    reset_fight(s)
     logger("🦸 Search for heroes to fight")
     hunting = True
     offset = 5
     scroll_attemps = 0
     nc = 0
     while hunting:
-        if game_error():
+        if game_error(s):
             return
 
         if not check_screen(images["boss-hunt-btn"], timeout=1):
@@ -401,7 +431,7 @@ def boss_hunting(s):
             heros = get_hero_with_energy()
             if (len(heros) - nc) > 0:
                 for (x, y, w, h) in heros:
-                    if game_error():
+                    if game_error(s):
                         return
 
                     if c['enable_hero_low_rarity_map_10_only']:
@@ -416,7 +446,7 @@ def boss_hunting(s):
                                 nc += 1
                                 logger(
                                     '🦸 [{}] Hero is not low rarity skip fight on map 10/10'
-                                    .format(s))
+                                    .format(str(s).capitalize()))
 
                         else:
                             move_to_with_randomness(x + offset + (w / 2),
@@ -431,10 +461,12 @@ def boss_hunting(s):
                     hero_in_fight = positions(images["plus"],
                                               threshold=ct["green_bar"])
                     if len(hero_in_fight) < 1:
+                        if is_break_time():
+                            return
                         logger("⚒️ Fighting with {} hero(s)".format(
                             3 - len(hero_in_fight)))
                         if not fight_boss(s):
-                            reset_fight()
+                            reset_fight(s)
                             return
                         nc = 0
                         scroll_attemps = 0
@@ -448,27 +480,52 @@ def boss_hunting(s):
                     hero_in_fight = positions(images["plus"],
                                               threshold=ct["green_bar"])
                     if len(hero_in_fight) <= (3 - c["hero_per_fight"]):
+                        if is_break_time():
+                            return
                         logger("⚒️ Fighting with {} hero(s)".format(
                             3 - len(hero_in_fight)))
                         if not fight_boss(s):
-                            reset_fight()
+                            reset_fight(s)
                             return
                         nc = 0
                         scroll_attemps = 0
                     else:
                         hunting = False
-                        reset_fight()
+                        reset_fight(s)
         else:
-            reset_fight()
+            damages = positions(images["damage"], threshold=ct["green_bar"])
+            cnt = 0
+            if len(damages) >= 3:
+                for d in damages:
+                    x, y, w, h = d
+                    e = positions_of_offset(images['energy-1'], x - 80, y - 90,
+                                            53, 30)
+                    if len(e) > 0:
+                        cnt += 1
+                if cnt >= 3:
+                    if is_break_time():
+                        return
+                    damages = positions(images["damage"],
+                                        threshold=ct["green_bar"])
+                    logger("⚒️ Fighting with {} hero(s)".format(len(damages)))
+                    if not fight_boss(s):
+                        reset_fight(s)
+                        return
+                    nc = 0
+                    scroll_attemps = 0
+                else:
+                    reset_fight(s)
+            else:
+                reset_fight(s)
 
 
 def goto_boss_hunt(s):
     global last
-    if click_btn(images["boss-hunt-back-2"]):
+    if click_btn(images["boss-hunt-back-2"], timeout=1):
         global login_attempts
         login_attempts = 0
 
-    click_btn(images["boss-hunt"], timeout=10)
+    click_btn(images["boss-hunt"], timeout=1)
     time.sleep(1)
     if check_screen(images['match-10'], timeout=3, threshold=0.8):
         last[s]['map_10'] = True
@@ -499,7 +556,7 @@ def goto_boss_hunt(s):
         return False
     if check_screen(images["no-hero"]):
         logger("🦸 No heros, Please goto the shop to mint the heros")
-        click_btn(images["ok"])
+        click_ok()
         return False
 
     return True
@@ -523,12 +580,14 @@ def login():
 
     if not check_screen(images["boss-hunt"], timeout=60):
         notify_working_screen(
-            'Long time to login. Please goto your screen to login by yourself.'
-        )
-    click_btn(images['ok'])
+            'Long time to login. Please goto your screen to login by yourself.',
+            True)
+    click_ok()
 
 
 def boss_hunt(s):
+    if is_break_time():
+        return
     if not goto_boss_hunt(s):
         return
     if c["select_heroes_mode"] == "stamina":
@@ -537,29 +596,27 @@ def boss_hunt(s):
         logger("not implement")
 
 
-def reset_fight():
-    if game_error():
-        return
-    plus = positions(images["plus"], threshold=ct["green_bar"])
-    logger("🦸 Hero in fight -> {}".format(3 - len(plus)))
-    if len(plus) >= 3:
+def reset_fight(s):
+    if game_error(s):
         return
 
-    if check_screen(images["warrior"]):
-        offset = 310
-        matches = positions(images["warrior"])
-        x, y, w, h = matches[0]
-        move_to_with_randomness(x + offset, y + 85, 0)
-        pyautogui.click()
-        offset = 560
-        move_to_with_randomness(x + offset, y + 85, 0)
-        pyautogui.click()
-        offset = 800
-        move_to_with_randomness(x + offset, y + 85, 0)
-        pyautogui.click()
+    damage = positions(images["damage"], threshold=ct["green_bar"])
+    logger("🦸 Hero in fight -> {}".format(len(damage)))
+    if len(damage) > 0:
+        for f in damage:
+            x, y, w, h = f
+            move_to_with_randomness(x + 30, y - 100, 1)
+            pyautogui.click()
 
 
-def notify_working_screen(message="Working on screen"):
+def click_ok():
+    if check_screen(images['ok'], timeout=1):
+        notify_working_screen('Game Error/Warning', True)
+        click_btn(images['ok'], timeout=1)
+        notify_working_screen('Game after click OK', True)
+
+
+def notify_working_screen(message="Working on screen", force=False):
     with mss.mss() as sct:
         monitor_crop = {
             "top": 0,
@@ -570,13 +627,13 @@ def notify_working_screen(message="Working on screen"):
         x = sct.grab(monitor_crop)
         output = "screen.png"
         mss.tools.to_png(x.rgb, x.size, output=output)
-        notify_screen("screen.png", message)
+        notify_screen("screen.png", message, force)
 
 
-def notify_screen(image, message="Report current screen"):
+def notify_screen(image, message="Report current screen", force=False):
     try:
         if c["enable_line_notify"]:
-            if (c['enable_notify_with_picture']):
+            if (c['enable_notify_with_picture']) or force:
                 logger(message)
                 img = {"imageFile": open(image, "rb")}
                 data = {"message": message}
@@ -609,6 +666,24 @@ def notify(message):
     except:
         logger("Notify error.")
         pass
+
+
+def is_break_time():
+    if c['enable_break_time']:
+        today = datetime.today()
+        for bt in c['breaks']:
+            start = datetime.strptime(
+                '{} {}'.format(today.strftime('%d/%m/%Y'), bt['start']),
+                '%d/%m/%Y %H:%M:%S')
+            end = datetime.strptime(
+                '{} {}'.format(today.strftime('%d/%m/%Y'), bt['end']),
+                '%d/%m/%Y %H:%M:%S')
+            if datetime.timestamp(start) > datetime.timestamp(end):
+                end = end + timedelta(days=1)
+            if (datetime.timestamp(today) >= datetime.timestamp(start)) and (
+                    datetime.timestamp(today) <= datetime.timestamp(end)):
+                return True
+    return False
 
 
 def init():
@@ -687,15 +762,11 @@ def main():
     active_screen = ""
 
     print(cat)
-    # time.sleep(5)
     t = c["time_intervals"]
 
     init()
     last_action = time.time()
     action_notify_msg = "No action long time on {}"
-    # switch_to_work(last[screen_text.format(1)])
-    # check_hero_ready(last[screen_text.format(1)])
-    # return
     if len(last) > 0:
         switch_to_work(last['screen1'])
 
@@ -704,11 +775,23 @@ def main():
         if c["refresh_browser"] > 0:
             logger("refresh browser")
 
+        if is_break_time():
+            logger(None, progress_indicator=True)
+            sys.stdout.flush()
+            time.sleep(1)
+            continue
+
         for s in last:
-            click_btn(images['ok'], timeout=1)
-            if game_error():
+            click_ok()
+            if game_error(s):
                 continue
-            
+
+            if is_break_time():
+                logger(None, progress_indicator=True)
+                sys.stdout.flush()
+                time.sleep(1)
+                continue
+
             if now - last[s]["login"] > add_randomness(
                     t["check_for_login"] * 60):
                 if not (screen_text.format(last[s]["index"])) == active_screen:
@@ -719,7 +802,7 @@ def main():
                     except:
                         click_btn(images["luna-rush"], timeout=1)
                 if check_screen(images["login"], timeout=1):
-                    click_btn(images["ok"])
+                    click_ok()
                     login()
 
                 pyautogui.hotkey("ctrl", "2")
@@ -735,21 +818,18 @@ def main():
                     except:
                         click_btn(images["luna-rush"], timeout=1)
                 pyautogui.hotkey("ctrl", "1")
-                # notify_working_screen()
-                click_btn(images["ok"], timeout=1)
+                click_ok()
                 if not last[s]["ready"]:
                     check_hero_ready(s)
                 if last[s]['ready']:
-                    goto_home()
-                    if (check_screen(images["boss-hunt"])
-                            or check_screen(images["boss-hunt-btn"])
-                            or check_screen(images["match"])):
+                    if not check_screen(images['boss-hunt-t'], timeout=1):
+                        goto_home()
+                    if (check_screen(images["boss-hunt"], timeout=1)
+                            or check_screen(images["boss-hunt-btn"], timeout=1)
+                            or check_screen(images["match"], timeout=1)):
                         boss_hunt(s)
                         last[s]["ready"] = False
-                        # goto_home()
                         click_btn(images["boss-hunt-back-2"])
-                        # click_btn(images['boss-hunt'])
-                        # if check_screen(images['boss-hunt']):
 
                 pyautogui.hotkey("ctrl", "2")
                 last[s]["heroes"] = now
@@ -765,14 +845,7 @@ def main():
                     except:
                         click_btn(images["luna-rush"], timeout=1)
                 pyautogui.hotkey("ctrl", "1")
-                click_btn(images["ok"], timeout=1)
-                # goto_home()
-                # goto_boss_hunt()
-                # r = positions(images["energy"], threshold=ct["common"])
-                # if len(r) > 0:
-                #     last[s]["ready"] = True
-                # goto_home()
-                # click_btn(images['heros'])
+                click_ok()
                 check_hero_ready(s)
                 pyautogui.hotkey("ctrl", "2")
                 last[s]["actions"] = now

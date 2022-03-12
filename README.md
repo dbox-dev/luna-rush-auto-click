@@ -19,7 +19,7 @@
 - Switch to another tab to save the computer energy and switch back when it's time to boss hunt
 - Support multiple screen
 - Team arrangement system (Coming soon)
-- Brake time system (Coming soon)
+- Brake time system
 
 ### Computer and Browser settings
 - Unlock your Metamask
@@ -36,6 +36,19 @@
 ### Install python library via pip command
 ```shell
 pip install -r requirements.txt
+```
+### Break time system configurations
+```yaml
+---
+enable_break_time: True
+breaks:
+  -
+    start: '06:58:00'
+    end: '07:10:00'
+  -
+    start: '23:30:00'
+    end: '00:30:00'
+---
 ```
 
 ### Run auto click
