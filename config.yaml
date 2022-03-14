@@ -38,8 +38,9 @@ refresh_browser: 0
 stop_when_completed_map: 0
 # Set heros per fight default 3
 hero_per_fight: 3
+minimum_hero_per_fight: 3
 
-enable_hero_low_rarity_map_10_only: True
+enable_lowest_rarity_fight_on_map10_only: True
 # enable move mouse between waiting fight
 waiting_fight_move_mouse: False
 # enable line notification
@@ -52,4 +53,4 @@ enable_break_time: True
 breaks:
   -
     start: '06:58:00'
-    end: '07:10:00'
+    end: '08:00:00'

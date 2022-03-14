@@ -246,7 +246,7 @@ def check_hero_ready(s):
         time.sleep(2)
         r = positions(images["energy"], threshold=ct["default"])
         hero_ready += len(r)
-        if hero_ready >= 3:
+        if hero_ready >= c['hero_per_fight']:
             last[s]['ready'] = True
             logger('🦸 [{}] {} hero(s) ready to fight'.format(
                 str(s).capitalize(), hero_ready))
@@ -255,17 +255,7 @@ def check_hero_ready(s):
                 '🦸 [{}] Found {} hero(s) have the energy. Not ready to boss hunt'
                 .format(str(s).capitalize(), hero_ready))
 
-        click_btn(images['boss-hunt-back-2'], timeout=3, threshold=0.6)
-        click_btn(images['boss-hunt'])
-        # commoms = positions(images["card"], threshold=ct["default"])
-        # if len(commoms) == 0:
-        #     return
-        # x, y, w, h = commoms[0]
-        # move_to_with_randomness(x, y, 1)
-        # pyautogui.dragRel(0,
-        #                   c["click_and_drag_amount"],
-        #                   duration=1,
-        #                   button="left")
+        goto_home()
 
 
 def scroll_heros():
@@ -434,7 +424,7 @@ def boss_hunting(s):
                     if game_error(s):
                         return
 
-                    if c['enable_hero_low_rarity_map_10_only']:
+                    if c['enable_lowest_rarity_fight_on_map10_only']:
                         if last[s]['map_10']:
                             if check_on_print(images['card'], x,
                                               y) or check_on_print(
@@ -458,13 +448,13 @@ def boss_hunting(s):
                                                 y + (h / 2), 1)
                         pyautogui.click()
 
-                    hero_in_fight = positions(images["plus"],
+                    hero_in_fight = positions(images["damage"],
                                               threshold=ct["green_bar"])
-                    if len(hero_in_fight) < 1:
+                    if len(hero_in_fight) == c['hero_per_fight']:
                         if is_break_time():
                             return
                         logger("⚒️ Fighting with {} hero(s)".format(
-                            3 - len(hero_in_fight)))
+                            len(hero_in_fight)))
                         if not fight_boss(s):
                             reset_fight(s)
                             return
@@ -477,13 +467,13 @@ def boss_hunting(s):
                     scroll_attemps += 1
                     nc = 0
                 else:
-                    hero_in_fight = positions(images["plus"],
+                    hero_in_fight = positions(images["damage"],
                                               threshold=ct["green_bar"])
-                    if len(hero_in_fight) <= (3 - c["hero_per_fight"]):
+                    if len(hero_in_fight) >= c["minimum_hero_per_fight"]:
                         if is_break_time():
                             return
                         logger("⚒️ Fighting with {} hero(s)".format(
-                            3 - len(hero_in_fight)))
+                            len(hero_in_fight)))
                         if not fight_boss(s):
                             reset_fight(s)
                             return
@@ -495,14 +485,14 @@ def boss_hunting(s):
         else:
             damages = positions(images["damage"], threshold=ct["green_bar"])
             cnt = 0
-            if len(damages) >= 3:
+            if len(damages) >= c['hero_per_fight']:
                 for d in damages:
                     x, y, w, h = d
                     e = positions_of_offset(images['energy-1'], x - 80, y - 90,
                                             53, 30)
                     if len(e) > 0:
                         cnt += 1
-                if cnt >= 3:
+                if cnt >= c['hero_per_fight']:
                     if is_break_time():
                         return
                     damages = positions(images["damage"],
@@ -514,6 +504,9 @@ def boss_hunting(s):
                     nc = 0
                     scroll_attemps = 0
                 else:
+                    logger(
+                        '🦸 [{}] {} hero(s) not ready'.format(
+                            str(s).capitalize(), (len(damages) - cnt)))
                     reset_fight(s)
             else:
                 reset_fight(s)
@@ -526,7 +519,6 @@ def goto_boss_hunt(s):
         login_attempts = 0
 
     click_btn(images["boss-hunt"], timeout=1)
-    time.sleep(1)
     if check_screen(images['match-10'], timeout=3, threshold=0.8):
         last[s]['map_10'] = True
         logger('Fighting on map 10/10')
@@ -822,14 +814,9 @@ def main():
                 if not last[s]["ready"]:
                     check_hero_ready(s)
                 if last[s]['ready']:
-                    if not check_screen(images['boss-hunt-t'], timeout=1):
-                        goto_home()
-                    if (check_screen(images["boss-hunt"], timeout=1)
-                            or check_screen(images["boss-hunt-btn"], timeout=1)
-                            or check_screen(images["match"], timeout=1)):
-                        boss_hunt(s)
-                        last[s]["ready"] = False
-                        click_btn(images["boss-hunt-back-2"])
+                    boss_hunt(s)
+                    last[s]["ready"] = False
+                    goto_home()
 
                 pyautogui.hotkey("ctrl", "2")
                 last[s]["heroes"] = now
