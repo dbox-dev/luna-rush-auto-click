@@ -13,3 +13,4 @@ PyYAML==6.0
 requests==2.27.1
 urllib3==1.26.8
 pillow==9.0.1
+pytesseract==0.3.9

@@ -3,3 +3,5 @@
 *.db
 *.pyc
 *.log
+screen.png
+/target/

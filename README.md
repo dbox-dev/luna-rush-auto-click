@@ -1,10 +1,13 @@
 # luna-rush-auto-click
-![Luna Rush auto click](https://badgen.net/badge/LunaRushAutoClick/main/green?icon=terminal) 
-![Windows](https://badgen.net/github/checks/node-formidable/node-formidable/master/windows)
+![Luna Rush auto click](https://badgen.net/badge/LunaRushAutoClick/main/green?icon=pypi) 
+![Windows](https://badgen.net/badge/Windows/Support/green?icon=windows)
+![Linux](https://badgen.net/badge/Linux/Not%20Support/red?icon=terminal) 
 ![Release](https://badgen.net/github/release/dbox-dev/luna-rush-auto-click)
 ![License](https://badgen.net/github/license/dbox-dev/luna-rush-auto-click)
 ![Last Commit](https://badgen.net/github/last-commit/dbox-dev/luna-rush-auto-click/main)
 ![Fork](https://badgen.net/github/forks/dbox-dev/luna-rush-auto-click)
+![Stars](https://badgen.net/github/stars/dbox-dev/luna-rush-auto-click)
+
 ## Donate
 #### Smart Chain Wallet(BUSD/BNB)
 > 0xc0A75D88D49D38fFa0E96EA2ec808965cF090521
@@ -18,7 +21,7 @@
 - Automatically change the map
 - Switch to another tab to save the computer energy and switch back when it's time to boss hunt
 - Support multiple screen
-- Team arrangement system (Coming soon)
+- Team arrangement system
 - Brake time system
 
 ### Computer and Browser settings
@@ -39,6 +42,8 @@ pip install -r requirements.txt
 ```
 ### Break time system configurations
 ```yaml
+# config.yml
+
 ---
 enable_break_time: True
 breaks:
@@ -49,6 +54,33 @@ breaks:
     start: '23:30:00'
     end: '00:30:00'
 ---
+```
+
+### Team arrangement system configurations
+> [Download Tesseract](https://github.com/UB-Mannheim/tesseract/wiki)
+
+```yaml
+# config.yml
+
+enable_team_arrangement: True # Set true to enable team arrangement
+tesseract_cmd: 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe' # Set tesseract execute (path to exe)
+teams: # Set teams with array
+  - # team (auto map in initial function)
+    a: # Team name
+      heros: # Heroes in team
+        - 699997
+        - 699998
+        - 699999
+      fight_map_10: True # set True/False fight on map 10/10
+    ---
+  - # team (auto map in initial function)
+    a: # Team name
+      heros: # Heroes in team
+        - 789997
+        - 789998
+        - 789999
+      fight_map_10: True # set True/False fight on map 10/10
+    ---
 ```
 
 ### Run auto click

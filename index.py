@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
+import os
+import re
 import sys
 import time
 from os import listdir
 from random import randint, random
+from PIL import Image
 
 import mss
 import numpy as np
@@ -11,6 +14,7 @@ import pyautogui
 import requests
 import yaml
 from cv2 import cv2
+import pytesseract
 
 from src.logger import logger
 
@@ -142,9 +146,6 @@ def print_of_offset(x, y, w, h):
             "width": w,
             "height": h,
         }
-        # xx = sct.grab(monitor_crop)
-        # output = "sct-{top}x{left}_{width}x{height}.png".format(**monitor_crop)
-        # mss.tools.to_png(xx.rgb, xx.size, output=output)
         sct_img = np.array(sct.grab(monitor_crop))
         return sct_img[:, :, :3]
 
@@ -246,6 +247,8 @@ def check_hero_ready(s):
         time.sleep(2)
         r = positions(images["energy"], threshold=ct["default"])
         hero_ready += len(r)
+        if hero_ready > 15:
+            hero_ready = 15
         if hero_ready >= c['hero_per_fight']:
             last[s]['ready'] = True
             logger('🦸 [{}] {} hero(s) ready to fight'.format(
@@ -297,6 +300,51 @@ def get_hero_with_energy():
         hero_with_energy.append(eng)
 
     return hero_with_energy
+
+
+def choose_heroes_team_fight(heroes, s):
+    global last
+    pytesseract.pytesseract.tesseract_cmd = r'' + c['tesseract_cmd']
+    offset = 5
+    scroll_attemps = 0
+    reset_fight(s)
+    choose_cnt = 0
+    click_btn(images['expand'])
+    while True:
+        hwe = positions(images["energy"], threshold=ct["common"])
+        if len(hwe) > 0:
+            i = 1
+            for (x, y, w, h) in hwe:
+                imgage_of_offset(x - 27, y - 102, 40, 12,
+                                 'id-{}.png'.format(i))
+                txt = pytesseract.image_to_string(r'id-{}.png'.format(i),
+                                                  lang='eng',
+                                                  config='--psm 10')
+
+                for th in heroes:
+                    if str(th) == str(re.sub('[^0-9]', '', txt)):
+                        move_to_with_randomness(x + offset + (w / 2),
+                                                y + (h / 2), 1)
+                        pyautogui.click()
+                        choose_cnt += 1
+                        if choose_cnt == len(heroes):
+                            click_btn(images['collapse'])
+                            break
+                if os.path.exists('id-{}.png'.format(i)):
+                    os.remove('id-{}.png'.format(i))
+                i += 1
+        hero_in_fight = positions(images["damage"], threshold=ct["green_bar"])
+        if len(hero_in_fight) == len(heroes):
+            break
+        else:
+            click_btn(images['expand'])
+
+        if scroll_attemps < c["scroll_attemps"]:
+            scroll_heros()
+            scroll_attemps += 1
+            time.sleep(3)
+        else:
+            break
 
 
 def check_map():
@@ -356,13 +404,20 @@ def fight_boss(s):
         if check_screen(images["match"], timeout=1):
             logger("👉 [{}] Yeah!! pass the map".format(str(s).capitalize()))
             chk = False
+            last[s]['current_map'] = get_current_map()
+            last[s]['current_boss'] = get_current_boss()
             if check_screen(images['match-10'], timeout=3, threshold=0.8):
                 last[s]['map_10'] = True
-                logger('[{}] Fighting on map 10/10'.format(
-                    str(s).capitalize()))
+                cm = '10/10'
+                if last[s]['current_map'] != '' and last[s][
+                        'current_map'] != 'x/10':
+                    cm = last[s]['current_map']
+                logger('[{}] Fighting on map {}'.format(
+                    str(s).capitalize(), cm))
             else:
                 last[s]['map_10'] = False
-                logger('[{}] Fighting on map x/10'.format(str(s).capitalize()))
+                logger('[{}] Fighting on map {}'.format(
+                    str(s).capitalize(), last[s]['current_map']))
 
             if not check_map():
                 return False
@@ -401,130 +456,174 @@ def game_error(s):
     return False
 
 
-def boss_hunting(s):
+def choose_heroes(s):
     global last
     reset_fight(s)
-    logger("🦸 Search for heroes to fight")
-    hunting = True
+    nc = 0
     offset = 5
     scroll_attemps = 0
-    nc = 0
-    while hunting:
+
+    while True:
+        hero_with_energy = positions(images["energy"], threshold=ct["common"])
+        logger("🦸 Hero have a energy -> {}".format(len(hero_with_energy)))
+        if (len(hero_with_energy) - nc) > 0:
+            for (x, y, w, h) in hero_with_energy:
+                if c['enable_lowest_rarity_fight_on_map10_only']:
+                    if last[s]['map_10']:
+                        if check_on_print(images['card'], x,
+                                          y) or check_on_print(
+                                              images['rare'], x, y):
+                            move_to_with_randomness(x + offset + (w / 2),
+                                                    y + (h / 2), 1)
+                            pyautogui.click()
+                            time.sleep(1)
+                        else:
+                            nc += 1
+                            logger(
+                                '🦸 [{}] Hero is not low rarity skip fight on map 10/10'
+                                .format(str(s).capitalize()))
+
+                    else:
+                        move_to_with_randomness(x + offset + (w / 2),
+                                                y + (h / 2), 1)
+                        pyautogui.click()
+                        time.sleep(1)
+
+                else:
+                    move_to_with_randomness(x + offset + (w / 2), y + (h / 2),
+                                            1)
+                    pyautogui.click()
+                    time.sleep(1)
+
+                hero_in_fight = positions(images["damage"],
+                                          threshold=ct["green_bar"])
+                if len(hero_in_fight) == c['hero_per_fight']:
+                    nc = 0
+                    scroll_attemps = 0
+                    return True
+
+            hero_in_fight = positions(images["damage"],
+                                      threshold=ct["green_bar"])
+            if len(hero_in_fight) == c['hero_per_fight']:
+                return True
+            else:
+                scroll_heros()
+                time.sleep(1)
+                scroll_attemps += 1
+                nc = 0
+        else:
+            if scroll_attemps < c["scroll_attemps"]:
+                scroll_heros()
+                time.sleep(1)
+                scroll_attemps += 1
+                nc = 0
+            else:
+                hero_in_fight = positions(images["damage"],
+                                          threshold=ct["green_bar"])
+                if len(hero_in_fight) == c['minimum_hero_per_fight']:
+                    return True
+                else:
+                    reset_fight(s)
+                    return False
+
+
+def boss_hunting(s):
+    global last
+    logger("🦸 Search for heroes to fight")
+    while True:
         if game_error(s):
             return
 
         if not check_screen(images["boss-hunt-btn"], timeout=1):
             return
 
-        plus = positions(images["plus"], threshold=ct["green_bar"])
-        if len(plus) > 0:
-            heros = get_hero_with_energy()
-            if (len(heros) - nc) > 0:
-                for (x, y, w, h) in heros:
-                    if game_error(s):
-                        return
+        if c['enable_team_arrangement'] and c['tesseract_cmd'] != '':
+            tr = last[s]['team_ready']
+            if len(tr) <= 0:
+                return
 
-                    if c['enable_lowest_rarity_fight_on_map10_only']:
-                        if last[s]['map_10']:
-                            if check_on_print(images['card'], x,
-                                              y) or check_on_print(
-                                                  images['rare'], x, y):
-                                move_to_with_randomness(
-                                    x + offset + (w / 2), y + (h / 2), 1)
-                                pyautogui.click()
+            teams = last[s]['teams']
+            for tn in teams:
+                for trn in tr:
+                    if trn == tn:
+                        heros_in_team = teams[tn]['heros']
+                        if '10/10' == last[s]['current_map'] and not teams[tn][
+                                'fight_map_10']:
+                            logger('[{}] Skip fight on map 10/10'.format(
+                                str(s).capitalize()))
+                            continue
+                        choose_heroes_team_fight(heros_in_team, s)
+                        if is_break_time():
+                            return
+                        while True:
+                            cnt = 0
+                            cf = positions(images["damage"],
+                                           threshold=ct["green_bar"])
+                            for d in cf:
+                                x, y, w, h = d
+                                e = positions_of_offset(
+                                    images['energy-1'], x - 80, y - 90, 53, 30)
+                                if len(e) > 0:
+                                    cnt += 1
+                            if cnt == len(heros_in_team):
+                                if is_break_time():
+                                    return
+                                logger("⚒️  Team {} fighting with {} hero(s)".
+                                       format(tn, len(heros_in_team)))
+                                if not fight_boss(s):
+                                    reset_fight(s)
+                                    return
                             else:
-                                nc += 1
-                                logger(
-                                    '🦸 [{}] Hero is not low rarity skip fight on map 10/10'
-                                    .format(str(s).capitalize()))
-
-                        else:
-                            move_to_with_randomness(x + offset + (w / 2),
-                                                    y + (h / 2), 1)
-                            pyautogui.click()
-
-                    else:
-                        move_to_with_randomness(x + offset + (w / 2),
-                                                y + (h / 2), 1)
-                        pyautogui.click()
-
-                    hero_in_fight = positions(images["damage"],
-                                              threshold=ct["green_bar"])
-                    if len(hero_in_fight) == c['hero_per_fight']:
-                        if is_break_time():
-                            return
-                        logger("⚒️ Fighting with {} hero(s)".format(
-                            len(hero_in_fight)))
-                        if not fight_boss(s):
-                            reset_fight(s)
-                            return
-                        nc = 0
-                        scroll_attemps = 0
-                        break
-            else:
-                if scroll_attemps < c["scroll_attemps"]:
-                    scroll_heros()
-                    scroll_attemps += 1
-                    nc = 0
-                else:
-                    hero_in_fight = positions(images["damage"],
-                                              threshold=ct["green_bar"])
-                    if len(hero_in_fight) >= c["minimum_hero_per_fight"]:
-                        if is_break_time():
-                            return
-                        logger("⚒️ Fighting with {} hero(s)".format(
-                            len(hero_in_fight)))
-                        if not fight_boss(s):
-                            reset_fight(s)
-                            return
-                        nc = 0
-                        scroll_attemps = 0
-                    else:
-                        hunting = False
-                        reset_fight(s)
+                                reset_fight(s)
+                                break
+            reset_fight(s)
+            break
         else:
-            damages = positions(images["damage"], threshold=ct["green_bar"])
-            cnt = 0
-            if len(damages) >= c['hero_per_fight']:
-                for d in damages:
+            if not choose_heroes(s):
+                break
+            if is_break_time():
+                return
+            while True:
+                cnt = 0
+                cf = positions(images["damage"], threshold=ct["green_bar"])
+                for d in cf:
                     x, y, w, h = d
                     e = positions_of_offset(images['energy-1'], x - 80, y - 90,
                                             53, 30)
                     if len(e) > 0:
                         cnt += 1
-                if cnt >= c['hero_per_fight']:
+                if cnt == c['hero_per_fight'] or cnt == c[
+                        'minimum_hero_per_fight']:
                     if is_break_time():
                         return
-                    damages = positions(images["damage"],
-                                        threshold=ct["green_bar"])
-                    logger("⚒️ Fighting with {} hero(s)".format(len(damages)))
+                    logger("⚒️  Fighting with {} hero(s)".format(cnt))
                     if not fight_boss(s):
                         reset_fight(s)
                         return
-                    nc = 0
-                    scroll_attemps = 0
                 else:
-                    logger(
-                        '🦸 [{}] {} hero(s) not ready'.format(
-                            str(s).capitalize(), (len(damages) - cnt)))
                     reset_fight(s)
-            else:
-                reset_fight(s)
+                    break
 
 
 def goto_boss_hunt(s):
     global last
-    if click_btn(images["boss-hunt-back-2"], timeout=1):
+    if click_btn(images["boss-hunt-back-2"], timeout=3):
         global login_attempts
         login_attempts = 0
 
-    click_btn(images["boss-hunt"], timeout=1)
+    click_btn(images["boss-hunt"], timeout=3)
+    time.sleep(1)
+    last[s]['current_map'] = get_current_map()
+    last[s]['current_boss'] = get_current_boss()
     if check_screen(images['match-10'], timeout=3, threshold=0.8):
         last[s]['map_10'] = True
-        logger('Fighting on map 10/10')
+        cm = '10/10'
+        if last[s]['current_map'] != '' and last[s]['current_map'] != 'x/10':
+            cm = last[s]['current_map']
+        logger('Fighting on map {}'.format(cm))
     else:
         last[s]['map_10'] = False
-        logger('Fighting on map x/10')
+        logger('Fighting on map {}'.format(last[s]['current_map']))
 
     if not check_map():
         return False
@@ -707,6 +806,10 @@ def init():
                 "refresh_browser": time.time(),
                 "ready": False,
                 "map_10": False,
+                "team_ready": [],
+                "teams": {},
+                "current_map": '',
+                "current_boss": '',
             }
             index += 1
 
@@ -738,6 +841,213 @@ def switch_to_work(screen):
 
     active_screen = screen_text.format(screen["index"])
     pyautogui.hotkey("ctrl", "1")
+
+
+def imgage_of_offset(x, y, w, h, file_name="image-0.png"):
+    with mss.mss() as sct:
+        monitor_crop = {
+            "top": y,
+            "left": x,
+            "width": w,
+            "height": h,
+        }
+        xx = sct.grab(monitor_crop)
+        mss.tools.to_png(xx.rgb, xx.size, output=file_name)
+        sct_img = np.array(sct.grab(monitor_crop))
+        return sct.grab(monitor_crop)
+
+
+def check_team_to_fight(s):
+    if not c['enable_team_arrangement']:
+        return False
+    if c['tesseract_cmd'] == '':
+        return False
+
+    global last
+    pytesseract.pytesseract.tesseract_cmd = r'' + c['tesseract_cmd']
+    from_home = False
+    if check_screen(images['boss-hunt'], timeout=1):
+        click_btn(images['heros'])
+        from_home = True
+
+    if check_screen(
+            images['boss-hunt-back-1'],
+            timeout=1) and not check_screen(images['warrior-2'], timeout=1):
+        goto_home()
+        click_btn(images['heros'])
+        from_home = True
+
+    if check_screen(
+            images['boss-hunt-back-2'],
+            timeout=1) and not check_screen(images['warrior-2'], timeout=1):
+        goto_home()
+        click_btn(images['heros'])
+        from_home = True
+
+    if check_screen(images['warrior-2'], timeout=1):
+        if not from_home:
+            click_btn(images['boss-hunt-back-2'], timeout=3, threshold=0.6)
+            click_btn(images['heros'])
+
+    if len(last[s]['teams']) <= 0:
+        logger('[{}] Initialize teams arrangement'.format(str(s).capitalize()))
+        conf_teams = c['teams']
+        if len(conf_teams) > 0:
+            try:
+                for st in conf_teams:
+                    cards = positions(images["warrior-2"],
+                                      threshold=ct["green_bar"])
+                    x, y, w, h = cards[0]
+                    imgage_of_offset(x + 34, y + 122, 45, 15,
+                                     'id-{}.png'.format(0))
+                    pytesseract.pytesseract.tesseract_cmd = r'' + c[
+                        'tesseract_cmd']
+                    txt = pytesseract.image_to_string(r'id-{}.png'.format(0),
+                                                      lang='eng',
+                                                      config='--psm 10')
+                    hid = re.sub('[^0-9]', '', txt)
+                    for tn in st:
+                        heroes = st[tn]['heros']
+                        for hh in heroes:
+                            if str(hh) == str(hid):
+                                last[s]['teams'] = st
+                                break
+                        if len(last[s]['teams']) > 0:
+                            break
+                if os.path.exists('id-{}.png'.format(0)):
+                    os.remove('id-{}.png'.format(0))
+            except:
+                logger(
+                    '[{}] Initialize teams fail. Please check your configurations.'
+                    .format(str(s).capitalize()))
+                logger('[{}] Switch to normal fight.'.format(
+                    str(s).capitalize()))
+                return False
+        else:
+            logger('[{}] Initialize teams fail. No teams in configurations.'.
+                   format(str(s).capitalize()))
+            logger('[{}] Switch to normal fight.'.format(str(s).capitalize()))
+            return False
+
+    logger('[{}] Fighting with teams arrangement'.format(str(s).capitalize()))
+    h_ready = []
+    r = positions(images["energy"], threshold=ct["default"])
+    if len(r) > 0:
+        i = 1
+        for (x, y, w, h) in r:
+            imgage_of_offset(x - 30, y - 115, 45, 15, 'id-{}.png'.format(i))
+            txt = pytesseract.image_to_string(r'id-{}.png'.format(i),
+                                              lang='eng',
+                                              config='--psm 10')
+            if os.path.exists('id-{}.png'.format(i)):
+                os.remove('id-{}.png'.format(i))
+            h_ready.append(re.sub('[^0-9]', '', txt))
+            i += 1
+
+    commoms = positions(images["card"], threshold=ct["default"])
+    if len(commoms) == 0:
+        return
+    x, y, w, h = commoms[len(commoms) - 1]
+    move_to_with_randomness(x, y, 1)
+    pyautogui.dragRel(0,
+                      -c["click_and_drag_amount"],
+                      duration=1,
+                      button="left")
+    time.sleep(3)
+
+    r = positions(images["energy"], threshold=ct["default"])
+    if len(r) > 0:
+        i = 1
+        for (x, y, w, h) in r:
+            imgage_of_offset(x - 30, y - 115, 45, 15, 'id-{}.png'.format(i))
+            txt = pytesseract.image_to_string(r'id-{}.png'.format(i),
+                                              lang='eng',
+                                              config='--psm 10')
+            if os.path.exists('id-{}.png'.format(i)):
+                os.remove('id-{}.png'.format(i))
+            h_ready.append(re.sub('[^0-9]', '', txt))
+            i += 1
+
+    teams = last[s]['teams']
+    team_ready = []
+    for tn in teams:
+        heros_in_team = teams[tn]['heros']
+        cnt = 0
+        cnt_hero_in_teams = len(heros_in_team)
+        for h in heros_in_team:
+            for hr in h_ready:
+                if str(h) == str(hr):
+                    cnt += 1
+
+        if cnt == cnt_hero_in_teams:
+            team_ready.append(tn)
+            logger('Team {} ready to fight'.format(tn))
+        else:
+            logger('Team {} not ready to fight'.format(tn))
+
+    if len(team_ready) > 0:
+        last[s]['ready'] = True
+        last[s]['team_ready'] = team_ready
+
+    goto_home()
+
+    return True
+
+
+def get_current_boss():
+    try:
+        if c['tesseract_cmd'] != '':
+            pytesseract.pytesseract.tesseract_cmd = r'' + c['tesseract_cmd']
+            fm = positions(images["match"], threshold=ct["default"])
+            x, y, w, h = fm[0]
+            imgage_of_offset(x - 15, y - 115, 45, 15, 'boss-{}.png'.format(0))
+            txt = pytesseract.image_to_string(r'boss-{}.png'.format(0),
+                                              lang='eng',
+                                              config='--psm 10')
+            if os.path.exists('boss-{}.png'.format(0)):
+                os.remove('boss-{}.png'.format(0))
+                return re.sub('[^a-zA-Z0-9]', '', txt)
+    except:
+        logger('Get current boss fail')
+    return ''
+
+
+def get_current_map():
+    try:
+        if c['tesseract_cmd'] != '':
+            pytesseract.pytesseract.tesseract_cmd = r'' + c['tesseract_cmd']
+            fm = positions(images["match"], threshold=ct["default"])
+            if len(fm) > 0:
+                x, y, w, h = fm[0]
+                imgage_of_offset(x - 30, y - 2, 70, 26, 'map-{}.png'.format(0))
+                txt = pytesseract.image_to_string(r'map-{}.png'.format(0),
+                                                  lang='eng',
+                                                  config='--psm 10')
+                if os.path.exists('map-{}.png'.format(0)):
+                    os.remove('map-{}.png'.format(0))
+                return re.sub('[^0-9\/]', '', txt)
+    except:
+        logger('Get current boss fail')
+    return 'x/10'
+
+
+def get_bonus():
+    try:
+        if c['tesseract_cmd'] != '':
+            pytesseract.pytesseract.tesseract_cmd = r'' + c['tesseract_cmd']
+            fm = positions(images["ml-b"], threshold=ct["default"])
+            if len(fm) > 0:
+                x, y, w, h = fm[0]
+                imgage_of_offset(x - 95, y, 83, 50, 'map-{}.png'.format(0))
+                txt = pytesseract.image_to_string(r'map-{}.png'.format(0),
+                                                  lang='eng',
+                                                  config='--psm 10')
+                if os.path.exists('map-{}.png'.format(0)):
+                    os.remove('map-{}.png'.format(0))
+                return re.sub('[^0-9]', '', txt)
+    except:
+        logger('Get current boss fail')
+    return ''
 
 
 def main():
@@ -812,10 +1122,12 @@ def main():
                 pyautogui.hotkey("ctrl", "1")
                 click_ok()
                 if not last[s]["ready"]:
-                    check_hero_ready(s)
+                    if not check_team_to_fight(s):
+                        check_hero_ready(s)
                 if last[s]['ready']:
                     boss_hunt(s)
                     last[s]["ready"] = False
+                    last[s]['team_ready'] = []
                     goto_home()
 
                 pyautogui.hotkey("ctrl", "2")
@@ -833,7 +1145,8 @@ def main():
                         click_btn(images["luna-rush"], timeout=1)
                 pyautogui.hotkey("ctrl", "1")
                 click_ok()
-                check_hero_ready(s)
+                if not check_team_to_fight(s):
+                    check_hero_ready(s)
                 pyautogui.hotkey("ctrl", "2")
                 last[s]["actions"] = now
                 last_action = now
