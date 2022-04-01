@@ -5,3 +5,5 @@
 *.log
 screen.png
 /target/
+/report/*.json
+/*.png

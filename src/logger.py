@@ -1,3 +1,4 @@
+from datetime import datetime
 from src.date import dateFormatted
 
 import sys
@@ -35,7 +36,7 @@ def logger(message, progress_indicator = False, color = 'default'):
     if progress_indicator:
         if not last_log_is_progress:
             last_log_is_progress = True
-            formatted_message = color_formatted + "[{}] => {}".format(formatted_datetime, '⬆️ Processing last action..')
+            formatted_message = color_formatted + "[{}] => {}".format(formatted_datetime, '⬆️  Processing last action..')
             sys.stdout.write(formatted_message)
             sys.stdout.flush()
         else:
@@ -51,7 +52,9 @@ def logger(message, progress_indicator = False, color = 'default'):
     print(formatted_message_colored)
 
     if (c['save_log_to_file'] == True):
-        logger_file = open("./logs/logger.log", "a", encoding='utf-8')
+        today = datetime.today()
+        file_name = 'logger-{}.log'.format(today.strftime('%Y-%m-%d'))
+        logger_file = open("./logs/{}".format(file_name), "a", encoding='utf-8')
         logger_file.write(formatted_message + '\n')
         logger_file.close()
 

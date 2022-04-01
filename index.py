@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
+import io
+import json
 import os
 import re
 import sys
@@ -24,6 +26,8 @@ ct = c["threshold"]
 pause = c["time_intervals"]["interval_between_movements"]
 pyautogui.PAUSE = pause
 screen_text = "screen{}"
+
+REPORT_PATH = '.\\report\\'
 
 cat = """
 >>---> Press ctrl + c to kill the bot.
@@ -126,6 +130,21 @@ def check_on_print(img, x, y, timeout=3, threshold=ct["common"]):
     return False
 
 
+def check_on_offset(img, x, y, w, h, timeout=3, threshold=ct["common"]):
+    logger(None, progress_indicator=True)
+    start = time.time()
+    has_timed_out = False
+    while not has_timed_out:
+        matches = positions_of_offset(img, x, y, w, h, threshold=threshold)
+
+        if len(matches) == 0:
+            has_timed_out = time.time() - start > timeout
+            continue
+        return True
+
+    return False
+
+
 def print_screen():
     with mss.mss() as sct:
         monitor_crop = {
@@ -146,6 +165,9 @@ def print_of_offset(x, y, w, h):
             "width": w,
             "height": h,
         }
+        # x = sct.grab(monitor_crop)
+        # output = "sct-{top}x{left}_{width}x{height}.png".format(**monitor_crop)
+        # mss.tools.to_png(x.rgb, x.size, output=output)
         sct_img = np.array(sct.grab(monitor_crop))
         return sct_img[:, :, :3]
 
@@ -170,7 +192,7 @@ def positions(target, threshold=ct["default"], img=None):
 
 def positions_of(target, x, y, threshold=ct["default"], img=None):
     if img is None:
-        img = print_of_offset(x - 30, y - 110, 90, 120)
+        img = print_of_offset(x - 20, y - 110, 90, 120)
     result = cv2.matchTemplate(img, target, cv2.TM_CCOEFF_NORMED)
     w = target.shape[1]
     h = target.shape[0]
@@ -204,11 +226,86 @@ def positions_of_offset(target, x, y, w, h, threshold=ct["default"], img=None):
     return rectangles
 
 
+def positions_of_heroes(threshold=ct["default"], img=None):
+    if img is None:
+        img = print_screen()
+
+    rectangles = []
+    target = images["three-energy"]
+    result = cv2.matchTemplate(img, target, cv2.TM_CCOEFF_NORMED)
+    w = target.shape[1]
+    h = target.shape[0]
+
+    yloc, xloc = np.where(result >= threshold)
+    for (x, y) in zip(xloc, yloc):
+        rectangles.append([int(x), int(y), int(w), int(h)])
+        rectangles.append([int(x), int(y), int(w), int(h)])
+
+    target = images["two-energy"]
+    result = cv2.matchTemplate(img, target, cv2.TM_CCOEFF_NORMED)
+    w = target.shape[1]
+    h = target.shape[0]
+
+    yloc, xloc = np.where(result >= threshold)
+    for (x, y) in zip(xloc, yloc):
+        rectangles.append([int(x), int(y), int(w), int(h)])
+        rectangles.append([int(x), int(y), int(w), int(h)])
+
+    target = images["one-energy"]
+    result = cv2.matchTemplate(img, target, cv2.TM_CCOEFF_NORMED)
+    w = target.shape[1]
+    h = target.shape[0]
+
+    yloc, xloc = np.where(result >= threshold)
+    for (x, y) in zip(xloc, yloc):
+        rectangles.append([int(x), int(y), int(w), int(h)])
+        rectangles.append([int(x), int(y), int(w), int(h)])
+
+    rectangles, weights = cv2.groupRectangles(rectangles, 1, 0.2)
+    return rectangles
+
+
+def get_heroes_ready(x, y):
+    heroes_list = []
+    heroes = positions_of_offset(x,
+                                 y,
+                                 460,
+                                 320,
+                                 images["three-energy"],
+                                 threshold=ct['energy_3'])
+    logger('🦸 Found {} heroes energy 3/3'.format(len(heroes)))
+    for h in heroes:
+        heroes_list.append(h)
+    heroes = positions_of_offset(x,
+                                 y,
+                                 460,
+                                 320,
+                                 images["two-energy"],
+                                 threshold=ct['energy_2'])
+    logger('🦸 Found {} heroes energy 2/3'.format(len(heroes)))
+    for h in heroes:
+        heroes_list.append(h)
+    heroes = positions_of_offset(x,
+                                 y,
+                                 460,
+                                 320,
+                                 images["one-energy"],
+                                 threshold=ct['energy_1'])
+    logger('🦸 Found {} heroes energy 1/3'.format(len(heroes)))
+    for h in heroes:
+        heroes_list.append(h)
+
+    return heroes_list
+
+
 def check_hero_ready(s):
     global last
     pyautogui.hotkey("ctrl", "1")
     click_ok()
     from_home = False
+    name = last[s]['profile_name']
+    if name == '':
+        name = str(s).capitalize()
     if check_screen(images['boss-hunt'], timeout=1):
         click_btn(images['heros'])
         from_home = True
@@ -226,48 +323,49 @@ def check_hero_ready(s):
         goto_home()
         click_btn(images['heros'])
         from_home = True
-
+    pytesseract.pytesseract.tesseract_cmd = r'' + c['tesseract_cmd']
     if check_screen(images['warrior-2'], timeout=1):
         hero_ready = 0
         if not from_home:
             click_btn(images['boss-hunt-back-2'], timeout=3, threshold=0.6)
             click_btn(images['heros'])
-        r = positions(images["energy"], threshold=ct["default"])
-        hero_ready += len(r)
-
-        commoms = positions(images["card"], threshold=ct["default"])
-        if len(commoms) == 0:
-            return
-        x, y, w, h = commoms[len(commoms) - 1]
-        move_to_with_randomness(x, y, 1)
+        r = positions_of_offset(images["energy-x"],
+                                80,
+                                250,
+                                460,
+                                320,
+                                threshold=ct['default'])
+        # r = get_heroes_ready(80, 250)
+        hero_ready = len(r)
+        move_to_with_randomness(486, 595, 1)
         pyautogui.dragRel(0,
                           -c["click_and_drag_amount"],
                           duration=1,
                           button="left")
         time.sleep(2)
-        r = positions(images["energy"], threshold=ct["default"])
+        r = positions_of_offset(images["energy-x"],
+                                80,
+                                320,
+                                460,
+                                320,
+                                threshold=ct['default'])
+        # r = get_heroes_ready(80, 320)
         hero_ready += len(r)
         if hero_ready > 15:
             hero_ready = 15
         if hero_ready >= c['hero_per_fight']:
             last[s]['ready'] = True
-            logger('🦸 [{}] {} hero(s) ready to fight'.format(
-                str(s).capitalize(), hero_ready))
+            logger('🦸 [{}] {} hero(s) ready to fight'.format(name, hero_ready))
         else:
             logger(
                 '🦸 [{}] Found {} hero(s) have the energy. Not ready to boss hunt'
-                .format(str(s).capitalize(), hero_ready))
+                .format(name, hero_ready))
 
         goto_home()
 
 
 def scroll_heros():
-    commoms = positions(images["card"], threshold=ct["green_bar"])
-
-    if len(commoms) == 0:
-        return
-    x, y, w, h = commoms[len(commoms) - 1]
-    move_to_with_randomness(x, y, 1)
+    move_to_with_randomness(223, 517, 1)
 
     if not c["use_click_and_drag_instead_of_scroll"]:
         pyautogui.scroll(-c["scroll_size"])
@@ -292,16 +390,6 @@ def scroll_maps():
         pyautogui.dragRel(-c["click_and_drag_amount"], 0, duration=1)
 
 
-def get_hero_with_energy():
-    stamina_bars = positions(images["energy"], threshold=ct["common"])
-    logger("🦸 Hero have a energy -> {}".format(len(stamina_bars)))
-    hero_with_energy = []
-    for eng in stamina_bars:
-        hero_with_energy.append(eng)
-
-    return hero_with_energy
-
-
 def choose_heroes_team_fight(heroes, s):
     global last
     pytesseract.pytesseract.tesseract_cmd = r'' + c['tesseract_cmd']
@@ -311,7 +399,7 @@ def choose_heroes_team_fight(heroes, s):
     choose_cnt = 0
     click_btn(images['expand'])
     while True:
-        hwe = positions(images["energy"], threshold=ct["common"])
+        hwe = positions(images["energy-x"], threshold=ct["common"])
         if len(hwe) > 0:
             i = 1
             for (x, y, w, h) in hwe:
@@ -359,6 +447,8 @@ def check_map():
 def fight_boss(s):
     global last
     click_btn(images["boss-hunt-btn"])
+    if is_server_maintenance():
+        return False
     if click_btn(images['x']):
         reset_fight(s)
         return True
@@ -369,6 +459,10 @@ def fight_boss(s):
     fighting = True
     now = time.time()
     start_time = int(round(now * 1000))
+    name = last[s]['profile_name']
+    if name == '':
+        name = str(s).capitalize()
+
     while fighting:
         if game_error(s):
             return True
@@ -378,22 +472,21 @@ def fight_boss(s):
         logger(None, progress_indicator=True)
         if click_btn(images["tap-open"]):
             if check_screen(images['tap-to-continue-win'], timeout=5):
-                notify_working_screen("👉 [{}] Yeah!!! you win".format(
-                    str(s).capitalize()))
+                notify_working_screen("👉 [{}] Yeah!!! you win".format(name))
+                write_report(last[s]['profile_name'], get_bonus())
                 click_btn(images['tap-to-continue-win'], timeout=1)
             fighting = False
         elif check_screen(images["defeat"]):
             if check_screen(images['tap-to-continue-lose'], timeout=5):
-                notify_working_screen("👇 [{}] Oops!!! you lose".format(
-                    str(s).capitalize()))
+                notify_working_screen("👇 [{}] Oops!!! you lose".format(name))
+                write_report(last[s]['profile_name'], 0.0)
                 click_btn(images['tap-to-continue-lose'], timeout=1)
             fighting = False
 
         n = int(round(time.time() * 1000))
         if (n - start_time > (n + (15 * (60 * 1000))) - n):
             notify_working_screen(
-                '[{}] Boss hunt time over 15 minutes'.format(
-                    str(s).capitalize()), True)
+                '[{}] Boss hunt time over 15 minutes'.format(name), True)
             pyautogui.hotkey("ctrl", "f5")
             return False
 
@@ -402,7 +495,7 @@ def fight_boss(s):
         if game_error(s):
             return True
         if check_screen(images["match"], timeout=1):
-            logger("👉 [{}] Yeah!! pass the map".format(str(s).capitalize()))
+            logger("👉 [{}] Yeah!! pass the map".format(name))
             chk = False
             last[s]['current_map'] = get_current_map()
             last[s]['current_boss'] = get_current_boss()
@@ -412,12 +505,11 @@ def fight_boss(s):
                 if last[s]['current_map'] != '' and last[s][
                         'current_map'] != 'x/10':
                     cm = last[s]['current_map']
-                logger('[{}] Fighting on map {}'.format(
-                    str(s).capitalize(), cm))
+                logger('[{}] Fighting on map {}'.format(name, cm))
             else:
                 last[s]['map_10'] = False
                 logger('[{}] Fighting on map {}'.format(
-                    str(s).capitalize(), last[s]['current_map']))
+                    name, last[s]['current_map']))
 
             if not check_map():
                 return False
@@ -431,29 +523,52 @@ def fight_boss(s):
 
 
 def game_error(s):
+    global last
+    name = last[s]['profile_name']
+    if name == '':
+        name = str(s).capitalize()
     if check_screen(images['bg'], timeout=1):
         notify_working_screen(
-            "[{}] The Luna Rush has an error occured".format(
-                str(s).capitalize()), True)
+            "[{}] The Luna Rush has an error occured".format(name), True)
         pyautogui.hotkey("ctrl", "f5")
         return True
     if check_screen(images['logo'], timeout=1):
         notify_working_screen(
-            "[{}] Game error couldn't load the game".format(
-                str(s).capitalize()), True)
+            "[{}] Game error couldn't load the game".format(name), True)
         pyautogui.hotkey("ctrl", "f5")
         if check_screen(images['logo'], timeout=15) or click_btn(
                 images['alert-ok'], timeout=15):
             notify_working_screen(
-                "[{}] Game still loading wating 30 minutes".format(
-                    str(s).capitalize()), True)
+                "[{}] Game still loading wating 30 minutes".format(name), True)
             time.sleep(1800)
         else:
-            notify_working_screen(
-                '[{}] Game is come back'.format(str(s).capitalize()), True)
+            notify_working_screen('[{}] Game is come back'.format(name), True)
+        return True
+    if check_screen(images['ok'], timeout=1):
         return True
 
     return False
+
+
+def remove_hero_when_no_energy():
+    pytesseract.pytesseract.tesseract_cmd = r'' + c['tesseract_cmd']
+    cf = positions(images["damage"], threshold=ct["green_bar"])
+    for d in cf:
+        x, y, w, h = d
+        imgage_of_offset(x - 80, y - 85, 40, 17, 'e-{}.png'.format(0))
+        image = cv2.imread('e-{}.png'.format(0))
+        gray = get_grayscale(image)
+        cv2.imwrite('e-gray-{}.png'.format(0), gray)
+        txt = pytesseract.image_to_string(gray, lang='eng', config='--psm 10')
+        txt = txt.replace('V', '1/', 1)
+        txt = re.sub('[^0-9/]', '', txt)
+
+        logger(txt)
+        if txt == '0/3':
+            move_to_with_randomness(x + 30, y - 100, 1)
+            pyautogui.click()
+
+    time.sleep(1)
 
 
 def choose_heroes(s):
@@ -462,12 +577,20 @@ def choose_heroes(s):
     nc = 0
     offset = 5
     scroll_attemps = 0
-
+    name = last[s]['profile_name']
+    if name == '':
+        name = str(s).capitalize()
     while True:
-        hero_with_energy = positions(images["energy"], threshold=ct["common"])
-        logger("🦸 Hero have a energy -> {}".format(len(hero_with_energy)))
-        if (len(hero_with_energy) - nc) > 0:
-            for (x, y, w, h) in hero_with_energy:
+        heroes = positions(images["three-energy"], threshold=ct['energy_3'])
+        logger('🦸 Found {} heroes energy 3/3'.format(len(heroes)))
+        if len(heroes) <= 0:
+            heroes = positions(images["two-energy"], threshold=ct['energy_2'])
+            logger('🦸 Found {} heroes energy 2/3'.format(len(heroes)))
+        if len(heroes) <= 0:
+            heroes = positions(images["one-energy"], threshold=ct['energy_1'])
+            logger('🦸 Found {} heroes energy 1/3'.format(len(heroes)))
+        if (len(heroes) - nc) > 0:
+            for (x, y, w, h) in heroes:
                 if c['enable_lowest_rarity_fight_on_map10_only']:
                     if last[s]['map_10']:
                         if check_on_print(images['card'], x,
@@ -481,7 +604,7 @@ def choose_heroes(s):
                             nc += 1
                             logger(
                                 '🦸 [{}] Hero is not low rarity skip fight on map 10/10'
-                                .format(str(s).capitalize()))
+                                .format(name))
 
                     else:
                         move_to_with_randomness(x + offset + (w / 2),
@@ -498,9 +621,11 @@ def choose_heroes(s):
                 hero_in_fight = positions(images["damage"],
                                           threshold=ct["green_bar"])
                 if len(hero_in_fight) == c['hero_per_fight']:
-                    nc = 0
-                    scroll_attemps = 0
-                    return True
+
+                    if len(hero_in_fight) == c['hero_per_fight']:
+                        nc = 0
+                        scroll_attemps = 0
+                        return True
 
             hero_in_fight = positions(images["damage"],
                                       threshold=ct["green_bar"])
@@ -530,6 +655,9 @@ def choose_heroes(s):
 def boss_hunting(s):
     global last
     logger("🦸 Search for heroes to fight")
+    name = last[s]['profile_name']
+    if name == '':
+        name = str(s).capitalize()
     while True:
         if game_error(s):
             return
@@ -549,8 +677,7 @@ def boss_hunting(s):
                         heros_in_team = teams[tn]['heros']
                         if '10/10' == last[s]['current_map'] and not teams[tn][
                                 'fight_map_10']:
-                            logger('[{}] Skip fight on map 10/10'.format(
-                                str(s).capitalize()))
+                            logger('[{}] Skip fight on map 10/10'.format(name))
                             continue
                         choose_heroes_team_fight(heros_in_team, s)
                         if is_break_time():
@@ -562,14 +689,16 @@ def boss_hunting(s):
                             for d in cf:
                                 x, y, w, h = d
                                 e = positions_of_offset(
-                                    images['energy-1'], x - 80, y - 90, 53, 30)
+                                    images['energy-x'], x - 80, y - 90, 53, 30)
                                 if len(e) > 0:
                                     cnt += 1
                             if cnt == len(heros_in_team):
                                 if is_break_time():
                                     return
                                 logger("⚒️  Team {} fighting with {} hero(s)".
-                                       format(tn, len(heros_in_team)))
+                                       format(
+                                           str(tn).upper(),
+                                           len(heros_in_team)))
                                 if not fight_boss(s):
                                     reset_fight(s)
                                     return
@@ -588,14 +717,31 @@ def boss_hunting(s):
                 cf = positions(images["damage"], threshold=ct["green_bar"])
                 for d in cf:
                     x, y, w, h = d
-                    e = positions_of_offset(images['energy-1'], x - 80, y - 90,
-                                            53, 30)
-                    if len(e) > 0:
+                    imgage_of_offset(x - 80, y - 85, 40, 17,
+                                     'e-{}.png'.format(0))
+                    image = cv2.imread('e-{}.png'.format(0))
+                    gray = get_grayscale(image)
+                    cv2.imwrite('e-gray-{}.png'.format(0), gray)
+                    txt = pytesseract.image_to_string(gray,
+                                                      lang='eng',
+                                                      config='--psm 10')
+                    txt = txt.replace('V', '1/', 1)
+                    txt = re.sub('[^0-9/]', '', txt)
+                    if not txt == '0/3':
                         cnt += 1
                 if cnt == c['hero_per_fight'] or cnt == c[
                         'minimum_hero_per_fight']:
                     if is_break_time():
                         return
+
+                    rcf = positions(images["damage"],
+                                    threshold=ct["green_bar"])
+                    if not (len(rcf) == c['hero_per_fight']) or not (
+                            len(rcf) == c['minimum_hero_per_fight']):
+                        logger(
+                            '[{}] Heroes not equals hero per fight or minimum hero per fight.'
+                            .format(name))
+                        break
                     logger("⚒️  Fighting with {} hero(s)".format(cnt))
                     if not fight_boss(s):
                         reset_fight(s)
@@ -810,6 +956,7 @@ def init():
                 "teams": {},
                 "current_map": '',
                 "current_boss": '',
+                "profile_name": '',
             }
             index += 1
 
@@ -830,7 +977,8 @@ def switch_to_work(screen):
         win.height = mw_height
         win.topleft = (0, (w_height + 10))
 
-    logger("🖥 Working on screen {}".format(screen["index"]))
+    logger("🖥  Working on screen {} [{}]".format(screen["index"],
+                                                 screen['profile_name']))
     screen["instance"].width = w_width
     screen["instance"].height = w_height
     screen["instance"].topleft = (0, 0)
@@ -864,6 +1012,9 @@ def check_team_to_fight(s):
         return False
 
     global last
+    name = last[s]['profile_name']
+    if name == '':
+        name = str(s).capitalize()
     pytesseract.pytesseract.tesseract_cmd = r'' + c['tesseract_cmd']
     from_home = False
     if check_screen(images['boss-hunt'], timeout=1):
@@ -890,7 +1041,7 @@ def check_team_to_fight(s):
             click_btn(images['heros'])
 
     if len(last[s]['teams']) <= 0:
-        logger('[{}] Initialize teams arrangement'.format(str(s).capitalize()))
+        logger('[{}] Initialize teams arrangement'.format(name))
         conf_teams = c['teams']
         if len(conf_teams) > 0:
             try:
@@ -902,7 +1053,9 @@ def check_team_to_fight(s):
                                      'id-{}.png'.format(0))
                     pytesseract.pytesseract.tesseract_cmd = r'' + c[
                         'tesseract_cmd']
-                    txt = pytesseract.image_to_string(r'id-{}.png'.format(0),
+                    image = cv2.imread('id-{}.png'.format(0))
+                    gray = get_grayscale(image)
+                    txt = pytesseract.image_to_string(gray,
                                                       lang='eng',
                                                       config='--psm 10')
                     hid = re.sub('[^0-9]', '', txt)
@@ -919,24 +1072,25 @@ def check_team_to_fight(s):
             except:
                 logger(
                     '[{}] Initialize teams fail. Please check your configurations.'
-                    .format(str(s).capitalize()))
-                logger('[{}] Switch to normal fight.'.format(
-                    str(s).capitalize()))
+                    .format(name))
+                logger('[{}] Switch to normal fight.'.format(name))
                 return False
         else:
             logger('[{}] Initialize teams fail. No teams in configurations.'.
-                   format(str(s).capitalize()))
-            logger('[{}] Switch to normal fight.'.format(str(s).capitalize()))
+                   format(name))
+            logger('[{}] Switch to normal fight.'.format(name))
             return False
 
-    logger('[{}] Fighting with teams arrangement'.format(str(s).capitalize()))
+    logger('[{}] Fighting with teams arrangement'.format(name))
     h_ready = []
-    r = positions(images["energy"], threshold=ct["default"])
+    r = positions(images["energy-x"], threshold=ct["default"])
     if len(r) > 0:
         i = 1
         for (x, y, w, h) in r:
             imgage_of_offset(x - 30, y - 115, 45, 15, 'id-{}.png'.format(i))
-            txt = pytesseract.image_to_string(r'id-{}.png'.format(i),
+            image = cv2.imread('id-{}.png'.format(i))
+            gray = get_grayscale(image)
+            txt = pytesseract.image_to_string(gray,
                                               lang='eng',
                                               config='--psm 10')
             if os.path.exists('id-{}.png'.format(i)):
@@ -955,12 +1109,14 @@ def check_team_to_fight(s):
                       button="left")
     time.sleep(3)
 
-    r = positions(images["energy"], threshold=ct["default"])
+    r = positions(images["energy-x"], threshold=ct["default"])
     if len(r) > 0:
         i = 1
         for (x, y, w, h) in r:
             imgage_of_offset(x - 30, y - 115, 45, 15, 'id-{}.png'.format(i))
-            txt = pytesseract.image_to_string(r'id-{}.png'.format(i),
+            image = cv2.imread('id-{}.png'.format(i))
+            gray = get_grayscale(image)
+            txt = pytesseract.image_to_string(gray,
                                               lang='eng',
                                               config='--psm 10')
             if os.path.exists('id-{}.png'.format(i)):
@@ -1001,12 +1157,21 @@ def get_current_boss():
             fm = positions(images["match"], threshold=ct["default"])
             x, y, w, h = fm[0]
             imgage_of_offset(x - 15, y - 115, 45, 15, 'boss-{}.png'.format(0))
-            txt = pytesseract.image_to_string(r'boss-{}.png'.format(0),
+            image = cv2.imread('boss-{}.png'.format(0))
+            gray = get_grayscale(image)
+            txt = pytesseract.image_to_string(gray,
                                               lang='eng',
                                               config='--psm 10')
+            txt = txt.replace('O', '0')
+            txt = txt.replace('i', '1')
             if os.path.exists('boss-{}.png'.format(0)):
                 os.remove('boss-{}.png'.format(0))
-                return re.sub('[^a-zA-Z0-9]', '', txt)
+                b = re.sub('[^0-9]', '', txt)
+                if b == '':
+                    b = 'Boss1'
+                else:
+                    b = 'Boss{}'.format(str(b))
+                return b
     except:
         logger('Get current boss fail')
     return ''
@@ -1031,6 +1196,37 @@ def get_current_map():
     return 'x/10'
 
 
+def get_grayscale(image):
+    return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+
+def remove_noise(image):
+    return cv2.medianBlur(image, 5)
+
+
+def thresholding(image):
+    return cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+
+
+def dilate(image):
+    kernel = np.ones((5, 5), np.uint8)
+    return cv2.dilate(image, kernel, iterations=1)
+
+
+def erode(image):
+    kernel = np.ones((5, 5), np.uint8)
+    return cv2.erode(image, kernel, iterations=1)
+
+
+def opening(image):
+    kernel = np.ones((5, 5), np.uint8)
+    return cv2.morphologyEx(image, cv2.MORPH_OPEN, kernel)
+
+
+def canny(image):
+    return cv2.Canny(image, 100, 200)
+
+
 def get_bonus():
     try:
         if c['tesseract_cmd'] != '':
@@ -1038,16 +1234,177 @@ def get_bonus():
             fm = positions(images["ml-b"], threshold=ct["default"])
             if len(fm) > 0:
                 x, y, w, h = fm[0]
-                imgage_of_offset(x - 95, y, 83, 50, 'map-{}.png'.format(0))
-                txt = pytesseract.image_to_string(r'map-{}.png'.format(0),
+                imgage_of_offset(x - 120, y - 20, 122, 80,
+                                 'ml-{}.png'.format(0))
+
+                image = cv2.imread('ml-{}.png'.format(0))
+                gray = get_grayscale(image)
+                thresh = thresholding(gray)
+                txt = pytesseract.image_to_string(thresh,
                                                   lang='eng',
                                                   config='--psm 10')
-                if os.path.exists('map-{}.png'.format(0)):
-                    os.remove('map-{}.png'.format(0))
-                return re.sub('[^0-9]', '', txt)
+                b = re.sub('[^0-9.]', '', txt)
+                if b == '' or float(b) > 2:
+                    today = datetime.today()
+                    os.rename(
+                        'ml-{}.png'.format(0), 'ml-{}.png'.format(
+                            today.strftime('%Y-%m-%d-%H-%M-%S')))
+
+                if b == '':
+                    b = 0.0
+                b = float(b)
+                if os.path.exists('ml-{}.png'.format(0)):
+                    os.remove('ml-{}.png'.format(0))
+                return b
     except:
         logger('Get current boss fail')
+    return 0.0
+
+
+def get_profile_name():
+    try:
+        if c['tesseract_cmd'] != '':
+            pytesseract.pytesseract.tesseract_cmd = r'' + c['tesseract_cmd']
+            if not check_screen(images['user-icon']):
+                goto_home()
+            click_btn(images['user-icon'])
+            if check_screen(images['edit-btn']):
+                fm = positions(images["edit-btn"], threshold=ct["default"])
+                if len(fm) > 0:
+                    x, y, w, h = fm[0]
+                    imgage_of_offset(x - 410, y, 350, 32,
+                                     'pn-{}.png'.format(0))
+                    image = cv2.imread('pn-{}.png'.format(0))
+                    gray = get_grayscale(image)
+                    thresh = thresholding(gray)
+                    txt = pytesseract.image_to_string(thresh,
+                                                      lang='eng',
+                                                      config='--psm 10')
+                    if os.path.exists('pn-{}.png'.format(0)):
+                        os.remove('pn-{}.png'.format(0))
+                    return re.sub('[^a-zA-Z0-9]', '', txt)
+    except:
+        logger('Get profile name fail')
     return ''
+
+
+def get_wallet_id():
+    try:
+        if c['tesseract_cmd'] != '':
+            pytesseract.pytesseract.tesseract_cmd = r'' + c['tesseract_cmd']
+            fm = positions(images["edit-btn"], threshold=ct["default"])
+            if len(fm) > 0:
+                x, y, w, h = fm[0]
+                imgage_of_offset(x - 410, y + 32, 350, 20,
+                                 'n-{}.png'.format(0))
+                image = cv2.imread('n-{}.png'.format(0))
+                gray = get_grayscale(image)
+                thresh = thresholding(gray)
+                txt = pytesseract.image_to_string(thresh,
+                                                  lang='eng',
+                                                  config='--psm 10')
+                logger(re.sub('[^a-z0-9]', '', txt))
+                logger(txt)
+                if os.path.exists('n-{}.png'.format(0)):
+                    os.remove('n-{}.png'.format(0))
+                return re.sub('[^a-zA-Z0-9]', '', txt)
+    except:
+        logger('Get wallet id fail')
+    return ''
+
+
+def is_server_maintenance():
+    global server_is_maintenance
+    global last_check_server_maintenance
+    now = time.time()
+    t = c["time_intervals"]
+    if not server_is_maintenance:
+        if check_screen(images['server-maintenance'], 3):
+            pyautogui.hotkey("ctrl", "f5")
+            if check_screen(images['server-maintenance'], 15):
+                server_is_maintenance = True
+                last_check_server_maintenance = now
+                msg = '🥸  Server maintenance. Next check server online in {} minutes'.format(
+                    str(t["check_server_online"]))
+                notify_working_screen(msg, True)
+                sys.stdout.flush()
+                time.sleep(1)
+                return True
+            else:
+                server_is_maintenance = False
+        else:
+            server_is_maintenance = False
+    else:
+        if now - last_check_server_maintenance > add_randomness(
+                t["check_server_online"] * 60):
+            pyautogui.hotkey("ctrl", "f5")
+            if check_screen(images['server-maintenance'], 15):
+                server_is_maintenance = True
+                last_check_server_maintenance = now
+                msg = '🥸  Server still maintenance. Next check server online in {} minutes'.format(
+                    str(t["check_server_online"]))
+                notify_working_screen(msg, True)
+                sys.stdout.flush()
+                time.sleep(1)
+                return True
+            else:
+                server_is_maintenance = False
+        else:
+            logger(None, progress_indicator=True)
+            sys.stdout.flush()
+            time.sleep(1)
+            return True
+
+    return False
+
+
+def set_profile(s):
+    global last
+    if last[s]['profile_name'] == '':
+        last[s]['profile_name'] = get_profile_name()
+        logger('Hi! {}'.format(last[s]['profile_name']))
+        goto_home()
+
+
+def startupCheck(file_name):
+    if os.path.isfile(os.path.join(REPORT_PATH, file_name)) and os.access(
+            os.path.join(REPORT_PATH, file_name), os.R_OK):
+        pass
+    else:
+        with io.open(os.path.join(REPORT_PATH, file_name), 'w') as db_file:
+            db_file.write(json.dumps({}))
+
+
+def write_report(profile_name, mlus):
+    if not c['enable_write_report']:
+        return
+    today = datetime.today()
+    file_name = 'report-{}.json'.format(today.strftime('%Y-%b'))
+    startupCheck(file_name)
+    date = today.strftime('%Y-%m-%d')
+    time = today.strftime('%H:%M:%S')
+    with open(REPORT_PATH + file_name, 'r') as report_file:
+        json_object = json.load(report_file)
+        if profile_name in json_object:
+            old = json_object[profile_name]
+            if date in old:
+                old[date]['mlus'].append(mlus)
+                old[date]['time'].append(time)
+            else:
+                old[date] = {
+                    'mlus': [mlus],
+                    'time': [time],
+                }
+            json_object[profile_name] = old
+        else:
+            json_object[profile_name] = {
+                today.strftime('%Y-%m-%d'): {
+                    'mlus': [mlus],
+                    'time': [time],
+                }
+            }
+        with open(REPORT_PATH + file_name, 'w') as output:
+            json.dump(json_object, output)
 
 
 def main():
@@ -1072,10 +1429,21 @@ def main():
     if len(last) > 0:
         switch_to_work(last['screen1'])
 
+    global server_is_maintenance
+    global last_check_server_maintenance
+    server_is_maintenance = False
+    last_check_server_maintenance = 0
     while True:
         now = time.time()
         if c["refresh_browser"] > 0:
             logger("refresh browser")
+
+        if server_is_maintenance and now - last_check_server_maintenance < add_randomness(
+                t["check_server_online"] * 60):
+            logger(None, progress_indicator=True)
+            sys.stdout.flush()
+            time.sleep(1)
+            continue
 
         if is_break_time():
             logger(None, progress_indicator=True)
@@ -1084,6 +1452,13 @@ def main():
             continue
 
         for s in last:
+            if server_is_maintenance and now - last_check_server_maintenance < add_randomness(
+                    t["check_server_online"] * 60):
+                logger(None, progress_indicator=True)
+                sys.stdout.flush()
+                time.sleep(1)
+                continue
+
             click_ok()
             if game_error(s):
                 continue
@@ -1103,6 +1478,11 @@ def main():
                         last[s]["instance"].activate()
                     except:
                         click_btn(images["luna-rush"], timeout=1)
+
+                pyautogui.hotkey("ctrl", "1")
+                if is_server_maintenance():
+                    pyautogui.hotkey("ctrl", "2")
+                    continue
                 if check_screen(images["login"], timeout=1):
                     click_ok()
                     login()
@@ -1119,8 +1499,13 @@ def main():
                         last[s]["instance"].activate()
                     except:
                         click_btn(images["luna-rush"], timeout=1)
+
                 pyautogui.hotkey("ctrl", "1")
+                if is_server_maintenance():
+                    pyautogui.hotkey("ctrl", "2")
+                    continue
                 click_ok()
+                set_profile(s)
                 if not last[s]["ready"]:
                     if not check_team_to_fight(s):
                         check_hero_ready(s)
@@ -1143,8 +1528,13 @@ def main():
                         last[s]["instance"].activate()
                     except:
                         click_btn(images["luna-rush"], timeout=1)
+
                 pyautogui.hotkey("ctrl", "1")
+                if is_server_maintenance():
+                    pyautogui.hotkey("ctrl", "2")
+                    continue
                 click_ok()
+                set_profile(s)
                 if not check_team_to_fight(s):
                     check_hero_ready(s)
                 pyautogui.hotkey("ctrl", "2")
@@ -1166,7 +1556,8 @@ def main():
 
             time.sleep(1)
 
-        if now - last_action > add_randomness(t["report_no_action"] * 60):
+        if not server_is_maintenance and now - last_action > add_randomness(
+                t["report_no_action"] * 60):
             notify(action_notify_msg.format(s))
             logger(action_notify_msg.format(s))
             last_action = now

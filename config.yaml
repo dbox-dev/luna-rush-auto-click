@@ -6,6 +6,7 @@ time_intervals:
   interval_between_movements: 1
   report_no_action: 30
   check_for_login: 60
+  check_server_online: 60
 
 threshold:
   default: 0.7
@@ -14,6 +15,11 @@ threshold:
   go_to_work_btn: 0.9
   green_bar: 0.9
   stamina: 1.0
+  energy_0: 0.94
+  energy_1: 0.94
+  energy_2: 0.92
+  energy_3: 0.99
+  energy_x: 1.0
 
 scroll_size: 100
 scroll_attemps: 5
@@ -48,6 +54,8 @@ enable_line_notify: False
 enable_notify_with_picture: False
 line_api_url: "https://notify-api.line.me/api/notify"
 line_token: ""
+
+enable_write_report: False
 
 enable_break_time: False
 breaks:
