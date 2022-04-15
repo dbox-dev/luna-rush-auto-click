@@ -18,8 +18,8 @@ threshold:
   energy_0: 0.94
   energy_1: 0.94
   energy_2: 0.92
-  energy_3: 0.99
-  energy_x: 1.0
+  energy_3: 0.92
+  energy_x: 0.9
 
 scroll_size: 100
 scroll_attemps: 5

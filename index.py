@@ -397,18 +397,21 @@ def choose_heroes_team_fight(heroes, s):
     scroll_attemps = 0
     reset_fight(s)
     choose_cnt = 0
-    click_btn(images['expand'])
+    # click_btn(images['expand'])
     while True:
         hwe = positions(images["energy-x"], threshold=ct["common"])
         if len(hwe) > 0:
             i = 1
             for (x, y, w, h) in hwe:
-                imgage_of_offset(x - 27, y - 102, 40, 12,
-                                 'id-{}.png'.format(i))
-                txt = pytesseract.image_to_string(r'id-{}.png'.format(i),
+                imgage_of_offset(x - 75, y - 99, 40, 12, 'id-{}.png'.format(i))
+                image = cv2.imread('id-{}.png'.format(i))
+                gray = get_grayscale(image)
+                # thres = thresholding(gray)
+                txt = pytesseract.image_to_string(gray,
                                                   lang='eng',
                                                   config='--psm 10')
-
+                # logger(txt)
+                logger(str(re.sub('[^0-9]', '', txt)))
                 for th in heroes:
                     if str(th) == str(re.sub('[^0-9]', '', txt)):
                         move_to_with_randomness(x + offset + (w / 2),
@@ -416,7 +419,7 @@ def choose_heroes_team_fight(heroes, s):
                         pyautogui.click()
                         choose_cnt += 1
                         if choose_cnt == len(heroes):
-                            click_btn(images['collapse'])
+                            # click_btn(images['collapse'])
                             break
                 if os.path.exists('id-{}.png'.format(i)):
                     os.remove('id-{}.png'.format(i))
@@ -424,8 +427,8 @@ def choose_heroes_team_fight(heroes, s):
         hero_in_fight = positions(images["damage"], threshold=ct["green_bar"])
         if len(hero_in_fight) == len(heroes):
             break
-        else:
-            click_btn(images['expand'])
+        # else:
+        #     click_btn(images['expand'])
 
         if scroll_attemps < c["scroll_attemps"]:
             scroll_heros()
@@ -558,7 +561,7 @@ def remove_hero_when_no_energy():
         imgage_of_offset(x - 80, y - 85, 40, 17, 'e-{}.png'.format(0))
         image = cv2.imread('e-{}.png'.format(0))
         gray = get_grayscale(image)
-        cv2.imwrite('e-gray-{}.png'.format(0), gray)
+        # cv2.imwrite('e-gray-{}.png'.format(0), gray)
         txt = pytesseract.image_to_string(gray, lang='eng', config='--psm 10')
         txt = txt.replace('V', '1/', 1)
         txt = re.sub('[^0-9/]', '', txt)
@@ -580,7 +583,16 @@ def choose_heroes(s):
     name = last[s]['profile_name']
     if name == '':
         name = str(s).capitalize()
+
+    start = time.time()
+    pytesseract.pytesseract.tesseract_cmd = r'' + c['tesseract_cmd']
     while True:
+        now = time.time()
+        if now - start > add_randomness(30 * 60):
+            msg = '🥸  Long time to choose heroes'
+            notify_working_screen(msg, True)
+            return False
+
         heroes = positions(images["three-energy"], threshold=ct['energy_3'])
         logger('🦸 Found {} heroes energy 3/3'.format(len(heroes)))
         if len(heroes) <= 0:
@@ -721,7 +733,7 @@ def boss_hunting(s):
                                      'e-{}.png'.format(0))
                     image = cv2.imread('e-{}.png'.format(0))
                     gray = get_grayscale(image)
-                    cv2.imwrite('e-gray-{}.png'.format(0), gray)
+                    # cv2.imwrite('e-gray-{}.png'.format(0), gray)
                     txt = pytesseract.image_to_string(gray,
                                                       lang='eng',
                                                       config='--psm 10')
@@ -1002,6 +1014,11 @@ def imgage_of_offset(x, y, w, h, file_name="image-0.png"):
         xx = sct.grab(monitor_crop)
         mss.tools.to_png(xx.rgb, xx.size, output=file_name)
         sct_img = np.array(sct.grab(monitor_crop))
+
+        # x = sct.grab(monitor_crop)
+        # output = "sct-{top}x{left}_{width}x{height}.png".format(**monitor_crop)
+        # mss.tools.to_png(x.rgb, x.size, output=output)
+
         return sct.grab(monitor_crop)
 
 
@@ -1040,59 +1057,67 @@ def check_team_to_fight(s):
             click_btn(images['boss-hunt-back-2'], timeout=3, threshold=0.6)
             click_btn(images['heros'])
 
-    if len(last[s]['teams']) <= 0:
-        logger('[{}] Initialize teams arrangement'.format(name))
-        conf_teams = c['teams']
-        if len(conf_teams) > 0:
-            try:
-                for st in conf_teams:
-                    cards = positions(images["warrior-2"],
-                                      threshold=ct["green_bar"])
-                    x, y, w, h = cards[0]
-                    imgage_of_offset(x + 34, y + 122, 45, 15,
-                                     'id-{}.png'.format(0))
-                    pytesseract.pytesseract.tesseract_cmd = r'' + c[
-                        'tesseract_cmd']
-                    image = cv2.imread('id-{}.png'.format(0))
-                    gray = get_grayscale(image)
-                    txt = pytesseract.image_to_string(gray,
-                                                      lang='eng',
-                                                      config='--psm 10')
-                    hid = re.sub('[^0-9]', '', txt)
-                    for tn in st:
-                        heroes = st[tn]['heros']
-                        for hh in heroes:
-                            if str(hh) == str(hid):
-                                last[s]['teams'] = st
-                                break
-                        if len(last[s]['teams']) > 0:
-                            break
-                if os.path.exists('id-{}.png'.format(0)):
-                    os.remove('id-{}.png'.format(0))
-            except:
-                logger(
-                    '[{}] Initialize teams fail. Please check your configurations.'
-                    .format(name))
-                logger('[{}] Switch to normal fight.'.format(name))
-                return False
-        else:
-            logger('[{}] Initialize teams fail. No teams in configurations.'.
-                   format(name))
-            logger('[{}] Switch to normal fight.'.format(name))
-            return False
+    # if len(last[s]['teams']) <= 0:
+    #     logger('[{}] Initialize teams arrangement'.format(name))
+    # conf_teams = c['teams']
+    # if len(conf_teams) > 0:
+    #     try:
+    #         for st in conf_teams:
+    #             cards = positions(images["warrior-2"],
+    #                               threshold=ct["green_bar"])
+    #             x, y, w, h = cards[0]
+    #             imgage_of_offset(x + 34, y + 122, 45, 15,
+    #                              'id-{}.png'.format(0))
+    #             pytesseract.pytesseract.tesseract_cmd = r'' + c[
+    #                 'tesseract_cmd']
+    #             image = cv2.imread('id-{}.png'.format(0))
+    #             gray = get_grayscale(image)
+    #             txt = pytesseract.image_to_string(gray,
+    #                                               lang='eng',
+    #                                               config='--psm 10')
+    #             logger(txt)
+    #             hid = re.sub('[^0-9]', '', txt)
+    #             for tn in st:
+    #                 heroes = st[tn]['heros']
+    #                 for hh in heroes:
+    #                     if str(hh) == str(hid):
+    #                         last[s]['teams'] = st
+    #                         break
+    #                 if len(last[s]['teams']) > 0:
+    #                     break
+    #         if os.path.exists('id-{}.png'.format(0)):
+    #             os.remove('id-{}.png'.format(0))
+    #     except:
+    #         logger(
+    #             '[{}] Initialize teams fail. Please check your configurations.'
+    #             .format(name))
+    #         logger('[{}] Switch to normal fight.'.format(name))
+    #         return False
+    # else:
+    #     logger('[{}] Initialize teams fail. No teams in configurations.'.
+    #            format(name))
+    #     logger('[{}] Switch to normal fight.'.format(name))
+    #     return False
 
     logger('[{}] Fighting with teams arrangement'.format(name))
     h_ready = []
-    r = positions(images["energy-x"], threshold=ct["default"])
+    r = positions_of_offset(images["energy-x"],
+                            80,
+                            250,
+                            460,
+                            320,
+                            threshold=ct["default"])
     if len(r) > 0:
         i = 1
         for (x, y, w, h) in r:
-            imgage_of_offset(x - 30, y - 115, 45, 15, 'id-{}.png'.format(i))
+            imgage_of_offset((x + 80) - 83, (y + 250) - 112, 40, 15,
+                             'id-{}.png'.format(i))
             image = cv2.imread('id-{}.png'.format(i))
             gray = get_grayscale(image)
             txt = pytesseract.image_to_string(gray,
                                               lang='eng',
                                               config='--psm 10')
+            # logger(txt)
             if os.path.exists('id-{}.png'.format(i)):
                 os.remove('id-{}.png'.format(i))
             h_ready.append(re.sub('[^0-9]', '', txt))
@@ -1103,27 +1128,33 @@ def check_team_to_fight(s):
         return
     x, y, w, h = commoms[len(commoms) - 1]
     move_to_with_randomness(x, y, 1)
-    pyautogui.dragRel(0,
-                      -c["click_and_drag_amount"],
-                      duration=1,
-                      button="left")
+    pyautogui.dragRel(0, -300, duration=1, button="left")
     time.sleep(3)
 
-    r = positions(images["energy-x"], threshold=ct["default"])
+    # r = positions(images["energy-x"], threshold=ct["default"])
+    r = positions_of_offset(images["energy-x"],
+                            80,
+                            320,
+                            460,
+                            320,
+                            threshold=ct["default"])
     if len(r) > 0:
         i = 1
         for (x, y, w, h) in r:
-            imgage_of_offset(x - 30, y - 115, 45, 15, 'id-{}.png'.format(i))
+            # imgage_of_offset(x - 30, y - 115, 45, 15, 'id-{}.png'.format(i))
+            imgage_of_offset((x + 80) - 83, (y + 320) - 112, 40, 15,
+                             'id-{}.png'.format(i))
             image = cv2.imread('id-{}.png'.format(i))
             gray = get_grayscale(image)
             txt = pytesseract.image_to_string(gray,
                                               lang='eng',
                                               config='--psm 10')
+            # logger(txt)
             if os.path.exists('id-{}.png'.format(i)):
                 os.remove('id-{}.png'.format(i))
             h_ready.append(re.sub('[^0-9]', '', txt))
             i += 1
-
+    # logger(h_ready)
     teams = last[s]['teams']
     team_ready = []
     for tn in teams:
@@ -1185,9 +1216,14 @@ def get_current_map():
             if len(fm) > 0:
                 x, y, w, h = fm[0]
                 imgage_of_offset(x - 30, y - 2, 70, 26, 'map-{}.png'.format(0))
-                txt = pytesseract.image_to_string(r'map-{}.png'.format(0),
+                image = cv2.imread('map-{}.png'.format(0))
+                gray = get_grayscale(image)
+                txt = pytesseract.image_to_string(gray,
                                                   lang='eng',
                                                   config='--psm 10')
+                # logger(txt)
+                txt = txt.replace('FIO', '7/10')
+                # logger(txt)
                 if os.path.exists('map-{}.png'.format(0)):
                     os.remove('map-{}.png'.format(0))
                 return re.sub('[^0-9\/]', '', txt)
@@ -1234,7 +1270,7 @@ def get_bonus():
             fm = positions(images["ml-b"], threshold=ct["default"])
             if len(fm) > 0:
                 x, y, w, h = fm[0]
-                imgage_of_offset(x - 120, y - 20, 122, 80,
+                imgage_of_offset(x - 125, y - 20, 127, 80,
                                  'ml-{}.png'.format(0))
 
                 image = cv2.imread('ml-{}.png'.format(0))
@@ -1363,6 +1399,7 @@ def set_profile(s):
     if last[s]['profile_name'] == '':
         last[s]['profile_name'] = get_profile_name()
         logger('Hi! {}'.format(last[s]['profile_name']))
+        last[s]['teams'] = c['teams'][last[s]['profile_name']]
         goto_home()
 
 
