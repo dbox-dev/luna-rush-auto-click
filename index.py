@@ -1399,7 +1399,8 @@ def set_profile(s):
     if last[s]['profile_name'] == '':
         last[s]['profile_name'] = get_profile_name()
         logger('Hi! {}'.format(last[s]['profile_name']))
-        last[s]['teams'] = c['teams'][last[s]['profile_name']]
+        if c['enable_team_arrangement']:
+            last[s]['teams'] = c['teams'][last[s]['profile_name']]
         goto_home()
 
 
