@@ -852,10 +852,11 @@ def reset_fight(s):
     damage = positions(images["damage"], threshold=ct["green_bar"])
     logger("🦸 Hero in fight -> {}".format(len(damage)))
     if len(damage) > 0:
-        for f in damage:
-            x, y, w, h = f
-            move_to_with_randomness(x + 30, y - 100, 1)
-            pyautogui.click()
+        # for f in damage:
+        #     x, y, w, h = f
+        #     move_to_with_randomness(x + 30, y - 100, 1)
+        #     pyautogui.click()
+        click_btn(images['remove-all'], timeout=5)
 
 
 def click_ok():
