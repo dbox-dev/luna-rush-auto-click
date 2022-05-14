@@ -17,9 +17,9 @@ threshold:
   stamina: 1.0
   energy_0: 0.94
   energy_1: 0.94
-  energy_2: 0.92
-  energy_3: 0.92
-  energy_x: 0.9
+  energy_2: 0.96
+  energy_3: 0.91
+  energy_x: 0.99
 
 scroll_size: 100
 scroll_attemps: 5
@@ -29,11 +29,11 @@ click_and_drag_amount: 200
 select_heroes_mode: "stamina"
 save_log_to_file: True
 
-window_width: 1100
-window_height: 800
+window_width: 1000
+window_height: 690
 
-window_min_width: 1100
-window_min_height: 800
+window_min_width: 1000
+window_min_height: 690
 
 # To enable refresh browser. value is hours.
 # 0 = disable

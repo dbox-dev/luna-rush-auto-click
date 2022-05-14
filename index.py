@@ -365,7 +365,7 @@ def check_hero_ready(s):
 
 
 def scroll_heros():
-    move_to_with_randomness(223, 517, 1)
+    move_to_with_randomness(203, 517, 1)
 
     if not c["use_click_and_drag_instead_of_scroll"]:
         pyautogui.scroll(-c["scroll_size"])
@@ -437,7 +437,11 @@ def choose_heroes_team_fight(heroes, s):
         else:
             break
 
-
+def click_skip():
+    click_btn(images['skip'], 1)
+    click_btn(images['ok'], 1)
+    
+    
 def check_map():
     m = positions(images["match-complete"], threshold=ct["default"])
     if c["stop_when_completed_map"] > 0 and len(
@@ -449,6 +453,7 @@ def check_map():
 
 def fight_boss(s):
     global last
+    click_skip()
     click_btn(images["boss-hunt-btn"])
     if is_server_maintenance():
         return False
@@ -586,21 +591,30 @@ def choose_heroes(s):
 
     start = time.time()
     pytesseract.pytesseract.tesseract_cmd = r'' + c['tesseract_cmd']
+    click_skip()
     while True:
         now = time.time()
         if now - start > add_randomness(30 * 60):
             msg = '🥸  Long time to choose heroes'
             notify_working_screen(msg, True)
             return False
-
+        hrs = []
         heroes = positions(images["three-energy"], threshold=ct['energy_3'])
         logger('🦸 Found {} heroes energy 3/3'.format(len(heroes)))
-        if len(heroes) <= 0:
-            heroes = positions(images["two-energy"], threshold=ct['energy_2'])
-            logger('🦸 Found {} heroes energy 2/3'.format(len(heroes)))
-        if len(heroes) <= 0:
-            heroes = positions(images["one-energy"], threshold=ct['energy_1'])
-            logger('🦸 Found {} heroes energy 1/3'.format(len(heroes)))
+        for h in heroes:
+            hrs.append(h)
+        # if len(heroes) <= 0:
+        heroes = positions(images["two-energy"], threshold=ct['energy_2'])
+        logger('🦸 Found {} heroes energy 2/3'.format(len(heroes)))
+        for h in heroes:
+            hrs.append(h)
+        # if len(heroes) <= 0:
+        heroes = positions(images["one-energy"], threshold=ct['energy_1'])
+        logger('🦸 Found {} heroes energy 1/3'.format(len(heroes)))
+        for h in heroes:
+            hrs.append(h)
+            
+        heroes = hrs
         if (len(heroes) - nc) > 0:
             for (x, y, w, h) in heroes:
                 if c['enable_lowest_rarity_fight_on_map10_only']:
@@ -668,6 +682,7 @@ def boss_hunting(s):
     global last
     logger("🦸 Search for heroes to fight")
     name = last[s]['profile_name']
+    click_skip()
     if name == '':
         name = str(s).capitalize()
     while True:
@@ -771,6 +786,7 @@ def goto_boss_hunt(s):
 
     click_btn(images["boss-hunt"], timeout=3)
     time.sleep(1)
+    click_skip()
     last[s]['current_map'] = get_current_map()
     last[s]['current_boss'] = get_current_boss()
     if check_screen(images['match-10'], timeout=3, threshold=0.8):
@@ -821,6 +837,9 @@ def login():
     global login_attempts
     logger("😿 Checking if game has disconnected")
     pyautogui.hotkey("ctrl", "f5")
+    if check_screen(images["ok-2"], timeout=10):
+        time.sleep(2)
+        click_btn(images["ok-2"], timeout=0)
     if click_btn(images["login"], timeout=15):
         logger("🎉 Connect wallet button clicked, logging in!")
 
@@ -1304,7 +1323,7 @@ def get_profile_name():
             pytesseract.pytesseract.tesseract_cmd = r'' + c['tesseract_cmd']
             if not check_screen(images['user-icon']):
                 goto_home()
-            click_btn(images['user-icon'])
+            click_btn(images['user-icon'], 0.9)
             if check_screen(images['edit-btn']):
                 fm = positions(images["edit-btn"], threshold=ct["default"])
                 if len(fm) > 0:
@@ -1468,6 +1487,8 @@ def main():
     if len(last) > 0:
         switch_to_work(last['screen1'])
 
+    # choose_heroes('screen1')
+    # return
     global server_is_maintenance
     global last_check_server_maintenance
     server_is_maintenance = False
@@ -1476,6 +1497,8 @@ def main():
         now = time.time()
         if c["refresh_browser"] > 0:
             logger("refresh browser")
+            
+        click_btn(images["ok-2"], timeout=0)
 
         if server_is_maintenance and now - last_check_server_maintenance < add_randomness(
                 t["check_server_online"] * 60):
@@ -1491,6 +1514,7 @@ def main():
             continue
 
         for s in last:
+            click_btn(images["ok-2"], timeout=0)
             if server_is_maintenance and now - last_check_server_maintenance < add_randomness(
                     t["check_server_online"] * 60):
                 logger(None, progress_indicator=True)
