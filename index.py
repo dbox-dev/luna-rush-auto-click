@@ -438,8 +438,9 @@ def choose_heroes_team_fight(heroes, s):
             break
 
 def click_skip():
-    click_btn(images['skip'], 1)
-    click_btn(images['ok'], 1)
+    click_btn(images['skip'], 0)
+    click_btn(images['ok'], 0)
+    click_btn(images['x'], 0)
     
     
 def check_map():
@@ -491,6 +492,7 @@ def fight_boss(s):
                 click_btn(images['tap-to-continue-lose'], timeout=1)
             fighting = False
 
+        click_skip()
         n = int(round(time.time() * 1000))
         if (n - start_time > (n + (15 * (60 * 1000))) - n):
             notify_working_screen(
@@ -499,6 +501,7 @@ def fight_boss(s):
             return False
 
     chk = True
+    click_skip()
     while chk:
         if game_error(s):
             return True
@@ -829,6 +832,7 @@ def goto_boss_hunt(s):
 
 def goto_home():
     logger("🏠 Goto home!")
+    click_skip()
     click_btn(images["boss-hunt-back-2"])
     click_btn(images["boss-hunt-back-1"])
 
@@ -1512,8 +1516,9 @@ def main():
             sys.stdout.flush()
             time.sleep(1)
             continue
-
+        
         for s in last:
+            click_skip()
             click_btn(images["ok-2"], timeout=0)
             if server_is_maintenance and now - last_check_server_maintenance < add_randomness(
                     t["check_server_online"] * 60):
