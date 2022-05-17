@@ -503,6 +503,7 @@ def fight_boss(s):
     chk = True
     click_skip()
     while chk:
+        click_skip()
         if game_error(s):
             return True
         if check_screen(images["match"], timeout=1):
